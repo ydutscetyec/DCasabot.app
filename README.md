@@ -20,5 +20,5 @@ The app runs with **Streamlit** and provides a **live webcam feed** to recognize
 ## 🖥️ Running Locally
 1. Clone the repo:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/DCasabot-App.git
-   cd DCasabot-App
+   git clone https://github.com/YOUR_USERNAME/DCasabot.app.git
+   cd DCasabot.app
