@@ -7,4 +7,5 @@ mediapipe==0.10.21
 tensorflow==2.20.0
 pandas==2.3.2
 scikit-learn==1.7.1
-gdown
+
+
