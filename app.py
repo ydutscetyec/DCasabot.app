@@ -8,6 +8,19 @@ from collections import deque
 from tensorflow.keras.models import load_model
 import pickle
 
+model_files = [
+    "staticgestures.h5",
+    "staticgestures.pkl",
+    "single_hand_gesture_model.h5",
+    "single_hand_label_encoder.npy",
+    "two_hand_model.h5",
+    "two_hand_label.npy"
+]
+
+missing = [f for f in model_files if not os.path.exists(os.path.join("models", f))]
+if missing:
+    st.error(f"Missing model files: {missing}")
+    st.stop()
 # ==============================
 # Base directory
 # ==============================
