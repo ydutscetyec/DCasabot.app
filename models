@@ -1,6 +1,0 @@
-staticgestures.h5
-staticgestures.pkl
-single_hand_gesture_model.h5
-single_hand_label_encoder.npy
-two_hand_model.h5
-two_hand_label.npy
