@@ -3,14 +3,20 @@ import streamlit as st
 import cv2
 import mediapipe as mp
 import numpy as np
-import time
 from collections import deque
 from tensorflow.keras.models import load_model
 import pickle
-import requests  # <-- replace gdown
+import requests
 
 # =========================
-# Download model files
+# Directories
+# =========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+# =========================
+# Google Drive model files
 # =========================
 MODEL_FILES = {
     "staticgestures.h5": "1NMG6IGZ8YbWewzKJ2gUneMGPVbi_UJjc",
@@ -20,13 +26,6 @@ MODEL_FILES = {
     "two_hand_model.h5": "18EAXuiV2sXWsMJ03nDW7NfsLUUjVTFjX",
     "two_hand_label.npy": "1SCB6ZPbjjAydl33lSjkkOC5B_hPOSsse"
 }
-
-MODELS_DIR = r"C:\Users\user\PycharmProjects\D'Casabot\models"
-try:
-    os.makedirs(MODELS_DIR)
-except FileExistsError:
-    pass  # folder already exists, continue
-
 
 def download_from_gdrive(file_id, dest_path):
     URL = "https://docs.google.com/uc?export=download"
@@ -41,6 +40,7 @@ def download_from_gdrive(file_id, dest_path):
             if chunk:
                 f.write(chunk)
 
+# Download missing models
 for filename, file_id in MODEL_FILES.items():
     path = os.path.join(MODELS_DIR, filename)
     if not os.path.exists(path):
@@ -49,7 +49,7 @@ for filename, file_id in MODEL_FILES.items():
         st.success(f"{filename} downloaded!")
 
 # =========================
-# Load your models after this
+# Load models
 # =========================
 STATIC_MODEL_PATH = os.path.join(MODELS_DIR, "staticgestures.h5")
 STATIC_LABELS_PATH = os.path.join(MODELS_DIR, "staticgestures.pkl")
@@ -59,7 +59,6 @@ with open(STATIC_LABELS_PATH, "rb") as f:
 static_classes = list(static_le.classes_)
 static_input_dim = static_model.inputs[0].shape[-1]
 
-# Motion gesture models
 SINGLE_HAND_MODEL = os.path.join(MODELS_DIR, "single_hand_gesture_model.h5")
 SINGLE_HAND_LABELS = os.path.join(MODELS_DIR, "single_hand_label_encoder.npy")
 TWO_HAND_MODEL = os.path.join(MODELS_DIR, "two_hand_model.h5")
@@ -70,17 +69,16 @@ single_classes = np.load(SINGLE_HAND_LABELS, allow_pickle=True)
 two_model = load_model(TWO_HAND_MODEL)
 two_classes = np.load(TWO_HAND_LABELS, allow_pickle=True)
 
-
-# ==============================
+# =========================
 # Mediapipe setup
-# ==============================
+# =========================
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.6, min_tracking_confidence=0.5)
 
-# ==============================
+# =========================
 # Helpers
-# ==============================
+# =========================
 def normalize_hand(hand_landmarks):
     if hand_landmarks is None:
         return [0.0]*63
@@ -98,9 +96,9 @@ def features_from_hand(hand_landmarks):
         feats.extend([lm.x, lm.y, lm.z])
     return feats
 
-# ==============================
+# =========================
 # Streamlit UI
-# ==============================
+# =========================
 st.title("🖐️ FSL Real-time Recognition")
 mode = st.sidebar.selectbox("Choose Mode", ["Static Gestures", "Motion Gestures"])
 run = st.checkbox("Run Webcam")
@@ -108,7 +106,6 @@ run = st.checkbox("Run Webcam")
 FRAME_WINDOW = st.image([])
 cap = None
 
-# For motion mode
 FRAMES_PER_SEQUENCE = 50
 FEATURES_PER_FRAME = 126
 frame_window = deque(maxlen=FRAMES_PER_SEQUENCE)
@@ -132,12 +129,10 @@ while run:
     display_conf = 0.0
 
     if results.multi_hand_landmarks:
-        # Draw hands
         for hand_landmarks in results.multi_hand_landmarks:
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
         if mode == "Static Gestures":
-            # Use first hand only
             feats = features_from_hand(results.multi_hand_landmarks[0])
             if len(feats) == static_input_dim:
                 probs = static_model.predict(np.array(feats).reshape(1, -1), verbose=0)[0]
@@ -146,7 +141,6 @@ while run:
                 display_conf = float(probs[idx])
 
         elif mode == "Motion Gestures":
-            # Handle one or two hands
             coords_list = [normalize_hand(h) for h in results.multi_hand_landmarks]
             if len(coords_list) == 1:
                 left_hand, right_hand = [0.0]*63, coords_list[0]
@@ -163,16 +157,12 @@ while run:
                 else:
                     probs = two_model.predict(X, verbose=0)[0]
                     classes = two_classes
-
                 idx = int(np.argmax(probs))
                 display_label = classes[idx]
                 display_conf = float(probs[idx])
                 frame_window.clear()
 
-    # Overlay
-    cv2.putText(frame, f"{display_label} {display_conf*100:.1f}%",
-                (10,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-
+    cv2.putText(frame, f"{display_label} {display_conf*100:.1f}%", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
     FRAME_WINDOW.image(frame, channels="BGR")
 
 cap.release()
