@@ -21,8 +21,12 @@ MODEL_FILES = {
     "two_hand_label.npy": "1SCB6ZPbjjAydl33lSjkkOC5B_hPOSsse"
 }
 
-DEST_DIR = "models"
-os.makedirs(DEST_DIR, exist_ok=True)
+MODELS_DIR = r"C:\Users\user\PycharmProjects\D'Casabot\models"
+try:
+    os.makedirs(MODELS_DIR)
+except FileExistsError:
+    pass  # folder already exists, continue
+
 
 def download_from_gdrive(file_id, dest_path):
     URL = "https://docs.google.com/uc?export=download"
@@ -38,7 +42,7 @@ def download_from_gdrive(file_id, dest_path):
                 f.write(chunk)
 
 for filename, file_id in MODEL_FILES.items():
-    path = os.path.join(DEST_DIR, filename)
+    path = os.path.join(MODELS_DIR, filename)
     if not os.path.exists(path):
         st.info(f"Downloading {filename}...")
         download_from_gdrive(file_id, path)
@@ -47,8 +51,8 @@ for filename, file_id in MODEL_FILES.items():
 # =========================
 # Load your models after this
 # =========================
-STATIC_MODEL_PATH = os.path.join(DEST_DIR, "staticgestures.h5")
-STATIC_LABELS_PATH = os.path.join(DEST_DIR, "staticgestures.pkl")
+STATIC_MODEL_PATH = os.path.join(MODELS_DIR, "staticgestures.h5")
+STATIC_LABELS_PATH = os.path.join(MODELS_DIR, "staticgestures.pkl")
 static_model = load_model(STATIC_MODEL_PATH, safe_mode=False)
 with open(STATIC_LABELS_PATH, "rb") as f:
     static_le = pickle.load(f)
