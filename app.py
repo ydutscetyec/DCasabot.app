@@ -1,12 +1,3 @@
-import streamlit as st
-import cv2
-import mediapipe as mp
-import numpy as np
-import time
-from collections import deque
-from tensorflow.keras.models import load_model
-import pickle
-
 import os
 import streamlit as st
 import cv2
@@ -20,14 +11,14 @@ import pickle
 # ==============================
 # Base directory
 # ==============================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
+BASE_DIR = os.path.dirname(__file__)  # path of current file
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 # ==============================
 # Load Models
 # ==============================
 # Static gesture model
-STATIC_MODEL_PATH = os.path.join(BASE_DIR, "models", "staticgestures.h5")
-STATIC_LABELS_PATH = os.path.join(BASE_DIR, "models", "staticgestures.pkl")
+STATIC_MODEL_PATH = os.path.join(MODELS_DIR, "staticgestures.h5")
+STATIC_LABELS_PATH = os.path.join(MODELS_DIR, "staticgestures.pkl")
 static_model = load_model(STATIC_MODEL_PATH, safe_mode=False)
 with open(STATIC_LABELS_PATH, "rb") as f:
     static_le = pickle.load(f)
@@ -35,10 +26,10 @@ static_classes = list(static_le.classes_)
 static_input_dim = static_model.inputs[0].shape[-1]
 
 # Motion gesture models
-SINGLE_HAND_MODEL = os.path.join(BASE_DIR, "models", "single_hand_gesture_model.h5")
-SINGLE_HAND_LABELS = os.path.join(BASE_DIR, "models", "single_hand_label_encoder.npy")
-TWO_HAND_MODEL = os.path.join(BASE_DIR, "models", "two_hand_model.h5")
-TWO_HAND_LABELS = os.path.join(BASE_DIR, "models", "two_hand_label.npy")
+SINGLE_HAND_MODEL = os.path.join(MODELS_DIR, "single_hand_gesture_model.h5")
+SINGLE_HAND_LABELS = os.path.join(MODELS_DIR, "single_hand_label_encoder.npy")
+TWO_HAND_MODEL = os.path.join(MODELS_DIR, "two_hand_model.h5")
+TWO_HAND_LABELS = os.path.join(MODELS_DIR, "two_hand_label.npy")
 
 single_model = load_model(SINGLE_HAND_MODEL)
 single_classes = np.load(SINGLE_HAND_LABELS, allow_pickle=True)
