@@ -7,20 +7,26 @@ import time
 from collections import deque
 from tensorflow.keras.models import load_model
 import pickle
+import gdown  # pip install gdown
 
-model_files = [
-    "staticgestures.h5",
-    "staticgestures.pkl",
-    "single_hand_gesture_model.h5",
-    "single_hand_label_encoder.npy",
-    "two_hand_model.h5",
-    "two_hand_label.npy"
-]
+# Map of models to Google Drive URLs
+MODEL_FILES_URLS = {
+    "staticgestures.h5": "https://drive.google.com/uc?id=1NMG6IGZ8YbWewzKJ2gUneMGPVbi_UJjc",
+    "staticgestures.pkl": "https://drive.google.com/uc?id=1FypzQbs8nZrbXP8HKv_hCHaJEaRLSFW8",
+    "single_hand_gesture_model.h5": "https://drive.google.com/uc?id=1bZ_H_Ye9-9l-NLlaZKFbm-rS9RiY9CyQ",
+    "single_hand_label_encoder.npy": "https://drive.google.com/uc?id=17Go1UMZ6GLXRDRc0PyOPC5Y8YfNuElV8",
+    "two_hand_model.h5": "https://drive.google.com/uc?id=18EAXuiV2sXWsMJ03nDW7NfsLUUjVTFjX",
+    "two_hand_label.npy": "https://drive.google.com/uc?id=1SCB6ZPbjjAydl33lSjkkOC5B_hPOSsse"
+}
 
-missing = [f for f in model_files if not os.path.exists(os.path.join("models", f))]
-if missing:
-    st.error(f"Missing model files: {missing}")
-    st.stop()
+
+os.makedirs("models", exist_ok=True)
+
+for filename, url in MODEL_FILES_URLS.items():
+    path = os.path.join("models", filename)
+    if not os.path.exists(path):
+        st.info(f"Downloading {filename}...")
+        gdown.download(url, path, quiet=False)
 # ==============================
 # Base directory
 # ==============================
