@@ -1,7 +1,8 @@
 streamlit
-opencv-python-headless
+opencv-python-headless==4.10.0.84
 mediapipe
 numpy
 tensorflow
 scikit-learn
 pandas
+
