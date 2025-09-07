@@ -7,37 +7,48 @@ import time
 from collections import deque
 from tensorflow.keras.models import load_model
 import pickle
-import gdown  # pip install gdown
+import requests  # <-- replace gdown
 
-# Map of models to Google Drive URLs
-MODEL_FILES_URLS = {
-    "staticgestures.h5": "https://drive.google.com/uc?id=1NMG6IGZ8YbWewzKJ2gUneMGPVbi_UJjc",
-    "staticgestures.pkl": "https://drive.google.com/uc?id=1FypzQbs8nZrbXP8HKv_hCHaJEaRLSFW8",
-    "single_hand_gesture_model.h5": "https://drive.google.com/uc?id=1bZ_H_Ye9-9l-NLlaZKFbm-rS9RiY9CyQ",
-    "single_hand_label_encoder.npy": "https://drive.google.com/uc?id=17Go1UMZ6GLXRDRc0PyOPC5Y8YfNuElV8",
-    "two_hand_model.h5": "https://drive.google.com/uc?id=18EAXuiV2sXWsMJ03nDW7NfsLUUjVTFjX",
-    "two_hand_label.npy": "https://drive.google.com/uc?id=1SCB6ZPbjjAydl33lSjkkOC5B_hPOSsse"
+# =========================
+# Download model files
+# =========================
+MODEL_FILES = {
+    "staticgestures.h5": "1NMG6IGZ8YbWewzKJ2gUneMGPVbi_UJjc",
+    "staticgestures.pkl": "1FypzQbs8nZrbXP8HKv_hCHaJEaRLSFW8",
+    "single_hand_gesture_model.h5": "1bZ_H_Ye9-9l-NLlaZKFbm-rS9RiY9CyQ",
+    "single_hand_label_encoder.npy": "17Go1UMZ6GLXRDRc0PyOPC5Y8YfNuElV8",
+    "two_hand_model.h5": "18EAXuiV2sXWsMJ03nDW7NfsLUUjVTFjX",
+    "two_hand_label.npy": "1SCB6ZPbjjAydl33lSjkkOC5B_hPOSsse"
 }
 
+DEST_DIR = "models"
+os.makedirs(DEST_DIR, exist_ok=True)
 
-os.makedirs("models", exist_ok=True)
+def download_from_gdrive(file_id, dest_path):
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
+            break
+    with open(dest_path, "wb") as f:
+        for chunk in response.iter_content(32768):
+            if chunk:
+                f.write(chunk)
 
-for filename, url in MODEL_FILES_URLS.items():
-    path = os.path.join("models", filename)
+for filename, file_id in MODEL_FILES.items():
+    path = os.path.join(DEST_DIR, filename)
     if not os.path.exists(path):
         st.info(f"Downloading {filename}...")
-        gdown.download(url, path, quiet=False)
-# ==============================
-# Base directory
-# ==============================
-BASE_DIR = os.path.dirname(__file__)  # path of current file
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-# ==============================
-# Load Models
-# ==============================
-# Static gesture model
-STATIC_MODEL_PATH = os.path.join(MODELS_DIR, "staticgestures.h5")
-STATIC_LABELS_PATH = os.path.join(MODELS_DIR, "staticgestures.pkl")
+        download_from_gdrive(file_id, path)
+        st.success(f"{filename} downloaded!")
+
+# =========================
+# Load your models after this
+# =========================
+STATIC_MODEL_PATH = os.path.join(DEST_DIR, "staticgestures.h5")
+STATIC_LABELS_PATH = os.path.join(DEST_DIR, "staticgestures.pkl")
 static_model = load_model(STATIC_MODEL_PATH, safe_mode=False)
 with open(STATIC_LABELS_PATH, "rb") as f:
     static_le = pickle.load(f)
