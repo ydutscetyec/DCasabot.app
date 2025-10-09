@@ -1,0 +1,74 @@
+// === SUMOBOT SENSOR CALIBRATION CODE ===
+// Reads 5x Sharp IR sensors (analog) and 3x Pololu QTR-1RC sensors (digital)
+// Displays live values in Serial Monitor
+// Includes a Start Button (press to begin calibration display)
+
+// ----------- Sharp IR (Analog) ------------
+#define OPP_LEFT         A0
+#define OPP_CENTER_LEFT  A1
+#define OPP_CENTER       A2
+#define OPP_CENTER_RIGHT A3
+#define OPP_RIGHT        A4
+ // GP2Y0A21YK0F (10–80 cm)
+
+// ----------- QTR-1RC Edge Sensors (Digital) ------------
+#define EDGE_LEFT   11
+#define EDGE_BACK   12
+#define EDGE_RIGHT  13
+
+// ----------- Start Button ------------
+#define START_BUTTON 10
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(EDGE_LEFT, INPUT_PULLUP);
+  pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
+  pinMode(START_BUTTON, INPUT_PULLUP);
+
+  Serial.println("=== SUMOBOT SENSOR CALIBRATION ===");
+  Serial.println("Press the START button to begin calibration...");
+  
+  // Wait for button press
+  while (digitalRead(START_BUTTON) == HIGH) {
+    Serial.print(".");
+    delay(300);
+  }
+
+  Serial.println("\nCalibration started!");
+  Serial.println("Move your hand/object near Sharp sensors and place QTR sensors over black and white.");
+  Serial.println("-----------------------------------------------------------");
+}
+
+void loop() {
+  // === Read Sharp Analog Sensors ===
+  int leftVal   = analogRead(OPP_LEFT);
+  int clVal     = analogRead(OPP_CENTER_LEFT);
+  int centerVal = analogRead(OPP_CENTER);
+  int crVal     = analogRead(OPP_CENTER_RIGHT);
+  int rightVal  = analogRead(OPP_RIGHT);
+
+
+  // === Read QTR Edge Sensors ===
+  int edgeLeft  = digitalRead(EDGE_LEFT);
+  int edgeBack  = digitalRead(EDGE_BACK);
+  int edgeRight = digitalRead(EDGE_RIGHT);
+
+  // === Print readings ===
+  Serial.println("-----------------------------------------------------------");
+  Serial.println("Sharp Sensors (Analog 0–1023):");
+  Serial.print("  LEFT: ");   Serial.println(leftVal);
+  Serial.print("  C-LEFT: "); Serial.println(clVal);
+  Serial.print("  CENTER: "); Serial.println(centerVal);
+  Serial.print("  C-RIGHT: ");Serial.println(crVal);
+  Serial.print("  RIGHT: ");  Serial.println(rightVal);
+
+  Serial.println("\nQTR Edge Sensors (Digital 0=White, 1=Black):");
+  Serial.print("  LEFT: ");  Serial.print(edgeLeft);
+  Serial.print("  | BACK: "); Serial.print(edgeBack);
+  Serial.print("  | RIGHT: "); Serial.println(edgeRight);
+  Serial.println("-----------------------------------------------------------\n");
+
+  delay(300); // Refresh every 0.3 sec
+}
