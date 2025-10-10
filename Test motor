@@ -1,0 +1,65 @@
+// === Motor Test for URC10 in PWM_DIR Mode ===
+// Matches your Sumo Bot setup
+// Left motor: PWM 5, DIR 4
+// Right motor: PWM 6, DIR 7
+// Start button optional (digital pin 10 active LOW)
+
+#include <CytronMotorDriver.h>
+
+// Motor setup
+CytronMD motorL(PWM_DIR, 5, 4); // Left motor
+CytronMD motorR(PWM_DIR, 6, 7); // Right motor
+
+void stopMotors() {
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
+}
+
+// --- Helper that accepts -255..255 speed (like your main code)
+void setMotors(int leftPWM, int rightPWM) {
+  leftPWM  = constrain(leftPWM, -255, 255);
+  rightPWM = constrain(rightPWM, -255, 255);
+  motorL.setSpeed(map(leftPWM, -255, 255, -100, 100));
+  motorR.setSpeed(map(rightPWM, -255, 255, -100, 100));
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("=== MOTOR TEST START ===");
+  delay(1000);
+}
+
+void loop() {
+  // --- Test LEFT motor ---
+  Serial.println("Left motor FORWARD");
+  setMotors(200, 0); // Left forward
+  delay(1000);
+
+  Serial.println("Left motor STOP");
+  stopMotors();
+  delay(500);
+
+  Serial.println("Left motor REVERSE");
+  setMotors(-200, 0); // Left reverse
+  delay(1000);
+
+  stopMotors();
+  delay(1000);
+
+  // --- Test RIGHT motor ---
+  Serial.println("Right motor FORWARD");
+  setMotors(0, 200); // Right forward
+  delay(1000);
+
+  Serial.println("Right motor STOP");
+  stopMotors();
+  delay(500);
+
+  Serial.println("Right motor REVERSE");
+  setMotors(0, -200); // Right reverse
+  delay(1000);
+
+  stopMotors();
+  Serial.println("=== One full test cycle done ===\n");
+  delay(2000); // Wait before next cycle
+}
