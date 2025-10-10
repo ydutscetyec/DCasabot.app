@@ -28,17 +28,17 @@ CytronMD motorR(PWM_DIR, 6, 7); // PWM pin 6, DIR pin 7
 
 // === Tunable Parameters ===
 // Detection thresholds (calibrate on your bench)
-const int OPP_THRESHOLD = 250;   // smaller = closer (calibrate per sensor)
+const int OPP_THRESHOLD = 200;   // smaller = closer (calibrate per sensor)
 
 // Edge trigger: QTR-1RC usually pulls LOW on white line. Set to HIGH if opposite
 const int EDGE_TRIGGER = LOW;    
 
 // Speeds (-100..100)
 const int SEARCH_SPEED     = 40;   // slow spin/search
-const int ATTACK_SPEED     = 70;  // full attack burst (short)
-const int CRUISE_SPEED     = 60;   // normal forward speed
-const int RETREAT_SPEED    = -70;  // reverse after hit
-const int RELOCATE_SPEED   = 50;   // spin to relocate
+const int ATTACK_SPEED     = 100;  // full attack burst (short)
+const int CRUISE_SPEED     = 80;   // normal forward speed
+const int RETREAT_SPEED    = -90;  // reverse after hit
+const int RELOCATE_SPEED   = 70;   // spin to relocate
 
 // Durations (ms) — tune these for your robot
 const unsigned long OPEN_FORWARD_MS   = 400UL; // initial forward
@@ -210,7 +210,7 @@ void loop() {
   if (digitalRead(START_BUTTON) == LOW) {
     stopMotors();
     Serial.println("Kill button pressed. Halting indefinitely.");
-    while (true) delay(4800);
+    while (true) delay(1000);
   }
 
   // Edge detection highest priority
