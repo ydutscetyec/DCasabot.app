@@ -1,4 +1,4 @@
-// === SINGLE STEP EDGE SENSOR MOTOR TEST WITH START BUTTON ===
+// === EDGE SENSOR MOTOR TEST WITH DIRECTIONAL RESPONSE ===
 
 #include <CytronMotorDriver.h>
 
@@ -12,8 +12,9 @@ CytronMD motorL(PWM_DIR, 5, 4);
 CytronMD motorR(PWM_DIR, 6, 7);
 
 const int EDGE_TRIGGER = LOW; // QTR output LOW = edge
-const int STEP_SPEED   = 100; // speed for single-step movement
-const int STEP_TIME    = 300; // ms duration of one step
+const int TURN_SPEED   = 100; // speed for turning
+const int FORWARD_SPEED = 100; // speed for moving forward
+const int ACTION_TIME  = 300; // ms duration of each action
 
 void setup() {
   Serial.begin(9600);
@@ -28,7 +29,7 @@ void setup() {
 
   Serial.println("=== EDGE MOTOR TEST READY ===");
   Serial.println("Press the button to start...");
-  
+
   // Wait for button press to start
   while (digitalRead(START_BUTTON) == HIGH) { delay(50); }
   delay(200); // debounce
@@ -46,20 +47,29 @@ void loop() {
   Serial.print(" | Back: "); Serial.print(backEdge ? "EDGE" : "SAFE");
   Serial.print(" | Right: "); Serial.println(rightEdge ? "EDGE" : "SAFE");
 
-  if (leftEdge || backEdge || rightEdge) {
-    // Edge detected → stop motors
-    motorL.setSpeed(0);
-    motorR.setSpeed(0);
-    Serial.println("EDGE DETECTED: Stopped!");
+  // Respond according to edge
+  if (rightEdge) {
+    Serial.println("Right edge detected → turning left");
+    motorL.setSpeed(-TURN_SPEED);
+    motorR.setSpeed(TURN_SPEED);
+    delay(ACTION_TIME);
+  } else if (leftEdge) {
+    Serial.println("Left edge detected → turning right");
+    motorL.setSpeed(TURN_SPEED);
+    motorR.setSpeed(-TURN_SPEED);
+    delay(ACTION_TIME);
+  } else if (backEdge) {
+    Serial.println("Back edge detected → moving forward");
+    motorL.setSpeed(FORWARD_SPEED);
+    motorR.setSpeed(FORWARD_SPEED);
+    delay(ACTION_TIME);
   } else {
-    // No edge → move forward one step
-    motorL.setSpeed(STEP_SPEED);
-    motorR.setSpeed(STEP_SPEED);
-    delay(STEP_TIME);
-    motorL.setSpeed(0);
-    motorR.setSpeed(0);
-    Serial.println("Moved one step forward.");
+    Serial.println("No edge → stopped");
   }
 
-  delay(500); // pause before next loop
+  // Stop motors after action
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
+
+  delay(300); // small pause before next loop
 }
