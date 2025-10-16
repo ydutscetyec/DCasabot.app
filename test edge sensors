@@ -1,0 +1,32 @@
+// === EDGE SENSOR TEST ===
+// Test code for 3x QTR-1RC edge sensors on pins 11, 12, 13
+// Prints HIGH/LOW readings to Serial Monitor
+
+#define EDGE_LEFT   11
+#define EDGE_BACK   12
+#define EDGE_RIGHT  13
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(EDGE_LEFT, INPUT_PULLUP);
+  pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
+
+  Serial.println("=== EDGE SENSOR TEST START ===");
+}
+
+void loop() {
+  bool left  = digitalRead(EDGE_LEFT);
+  bool back  = digitalRead(EDGE_BACK);
+  bool right = digitalRead(EDGE_RIGHT);
+
+  Serial.print("Left: ");
+  Serial.print(left == LOW ? "EDGE" : "SAFE");
+  Serial.print(" | Back: ");
+  Serial.print(back == LOW ? "EDGE" : "SAFE");
+  Serial.print(" | Right: ");
+  Serial.println(right == LOW ? "EDGE" : "SAFE");
+
+  delay(200); // update every 200ms
+}
