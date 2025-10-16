@@ -1,279 +1,252 @@
-// Hit-and-Run Sumobot with Opening Rush
-// Hardware:
-// - Sharp analog opponent sensors: A0..A5
-// - QTR-1RC edge sensors: digital pins 11 (LEFT), 12 (BACK), 13 (RIGHT)
-// - Start / Kill button: digital pin 10 (active LOW)
-// - Motors: URC10 (CytronMD PWM_DIR) pins: PWM 5/6, DIR 4/7
+  // === HIT-AND-RUN SUMOBOT (Edge Priority + Dual Range Logic) ===
+  //
+  // STRATEGY:
+  // - "Hit and Run" style: detect → attack → retreat → reposition
+  // - Highest priority = EDGE sensors (safety first)
+  // - Medium priority = SIDE sensors (for flanking attacks)
+  // - Low priority = CENTER long-range sensor (enemy far detection)
+  // - Includes opening rush maneuver before active combat
+  //
+  // HARDWARE:
+  // - 4x Sharp GP2Y0A41SK0F (4–30 cm): A0, A1, A3, A4
+  // - 1x Sharp GP2Y0A21YK0F (10–80 cm): A2 (center)
+  // - 3x QTR-1RC edge sensors: 11 (LEFT), 12 (BACK), 13 (RIGHT)
+  // - 1x Start Button: pin 10 (active LOW)
+  //  GM25 12V 980RPM
+  // 14.8v 150c 850mAh
+  // 41mm diameter silicone wheels
+  // - Motor Driver: Cytron URC10 (PWM_DIR mode)
+  //      Left  motor: PWM=5, DIR=4
+  //      Right motor: PWM=6, DIR=7
+
+  // === HIT-AND-RUN SUMOBOT (Non-Blocking Pro Version) ===
+// Responsive finite-state logic with real-time sensor checks.
 
 #include <CytronMotorDriver.h>
 
-// === Opponent Sensors (Analog Sharp Sensors) ===
+// === CONFIG ===
+#define DEBUG false
+#define dbg(x) if (DEBUG) Serial.println(x)
+
+// === Pins ===
 #define OPP_LEFT         A0
 #define OPP_CENTER_LEFT  A1
 #define OPP_CENTER       A2
 #define OPP_CENTER_RIGHT A3
 #define OPP_RIGHT        A4
-
-// === Edge Sensors (QTR-1RC Digital) ===
 #define EDGE_LEFT   11
 #define EDGE_BACK   12
 #define EDGE_RIGHT  13
-
-// === Start / Kill Button (active LOW) ===
 #define START_BUTTON 10
 
-// === Motors (URC10 PWM_DIR mode pins) ===
-CytronMD motorL(PWM_DIR, 5, 4); // PWM pin 5, DIR pin 4
-CytronMD motorR(PWM_DIR, 6, 7); // PWM pin 6, DIR pin 7
+CytronMD motorL(PWM_DIR, 5, 4);
+CytronMD motorR(PWM_DIR, 6, 7);
 
-// === Tunable Parameters ===
-// Detection thresholds (calibrate on your bench)
-const int OPP_THRESHOLD = 200;   // smaller = closer (calibrate per sensor)
+// === Thresholds ===
+const int SIDE_THRESHOLD   = 350;
+const int CENTER_THRESHOLD = 500;
+const int EDGE_TRIGGER     = LOW;
 
-// Edge trigger: QTR-1RC usually pulls LOW on white line. Set to HIGH if opposite
-const int EDGE_TRIGGER = LOW;    
+// === Speeds ===
+const int SEARCH_SPEED = 40;
+const int ATTACK_SPEED = 100;
+const int FLANK_SPEED  = 90;
+const int RETREAT_SPEED = -90;
+const int RELOCATE_SPEED = 70;
 
-// Speeds (-100..100)
-const int SEARCH_SPEED     = 40;   // slow spin/search
-const int ATTACK_SPEED     = 100;  // full attack burst (short)
-const int CRUISE_SPEED     = 80;   // normal forward speed
-const int RETREAT_SPEED    = -90;  // reverse after hit
-const int RELOCATE_SPEED   = 70;   // spin to relocate
+// === Timings ===
+const unsigned long ATTACK_MIN_MS = 400;
+const unsigned long ATTACK_MAX_MS = 700;
+const unsigned long RETREAT_MS = 250;
+const unsigned long RELOCATE_MS = 350;
+const unsigned long EDGE_BACKUP_MS = 180;
+const unsigned long EDGE_TURN_MS = 300;
+const unsigned long SPIN_FLIP_MS = 1000;
 
-// Durations (ms) — tune these for your robot
-const unsigned long OPEN_FORWARD_MS   = 400UL; // initial forward
-const unsigned long OPEN_CURVE_MS     = 600UL; // curve to flank
-const unsigned long OPEN_REVERSE_MS   = 250UL; // small reverse in opening
-const unsigned long ATTACK_MS         = 300UL;  // attack burst
-const unsigned long RETREAT_MS        = 350UL;  // reverse after attack
-const unsigned long RELOCATE_MS       = 350UL;  // spin to reposition after retreat
-const unsigned long EDGE_BACKUP_MS    = 180UL;  // backup when line detected
-const unsigned long EDGE_TURN_MS      = 300UL;  // turn after backing up
-
-// Safety / debounce
-const unsigned long DEBOUNCE_MS = 50UL;
-
-// Opening phase length gating
 bool openingDone = false;
 
-// ---------- Motor helpers ----------
-void stopMotors() {
-  motorL.setSpeed(0);
-  motorR.setSpeed(0);
+// === State Machine ===
+enum State { SEARCH, ATTACK, RETREAT, RELOCATE, EDGE_AVOID };
+State botState = SEARCH;
+unsigned long stateStart = 0;
+unsigned long stateDuration = 0;
+bool flankFromLeft = false;
+
+// === Motor Helpers ===
+int speedPWM(int pct) {
+  return map(constrain(pct, -100, 100), -100, 100, -255, 255);
+}
+void setMotors(int l, int r) {
+  motorL.setSpeed(speedPWM(l));
+  motorR.setSpeed(speedPWM(r));
+}
+void stopMotors() { setMotors(0, 0); }
+
+// === Utility ===
+bool timeUp() {
+  return (millis() - stateStart >= stateDuration);
 }
 
-void setMotors(int leftPct, int rightPct) { // left/right in -100..100
-  motorL.setSpeed(leftPct);
-  motorR.setSpeed(rightPct);
+bool edgeDetected() {
+  static unsigned long lastEdgeTime = 0;
+  bool edgeNow = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER ||
+                  digitalRead(EDGE_RIGHT) == EDGE_TRIGGER ||
+                  digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+  if (edgeNow) lastEdgeTime = millis();
+  return (millis() - lastEdgeTime < 80); // only valid within 80ms
 }
 
-// ---------- Behavior primitives ----------
-void searchSpin() {
-  // slow spin to scan arena
-  setMotors(SEARCH_SPEED, -SEARCH_SPEED);
-}
-
-void cruiseForward() {
-  setMotors(CRUISE_SPEED, CRUISE_SPEED);
-}
-
-void attackBurst() {
-  // immediate full attack burst (no ramp)
-  setMotors(ATTACK_SPEED, ATTACK_SPEED);
-  delay(ATTACK_MS);
-  stopMotors();
-}
-
-void retreat() {
-  setMotors(RETREAT_SPEED, RETREAT_SPEED);
-  delay(RETREAT_MS);
-  stopMotors();
-}
-
-void relocate() {
-  // simple pseudo-random spin direction seeded by analog noise/time
-  bool dir = (analogRead(A7) & 0x08) || (millis() & 0x04); // A7 noise may not exist on all boards; millis fallback
-  if (dir) setMotors(RELOCATE_SPEED, -RELOCATE_SPEED); // spin right
-  else     setMotors(-RELOCATE_SPEED, RELOCATE_SPEED); // spin left
-  delay(RELOCATE_MS);
-  stopMotors();
-}
-
-void edgeAvoidance() {
-  // Back up and turn away from edge
-  setMotors(-80, -80);
-  delay(EDGE_BACKUP_MS);
-
-  bool leftEdge  = (digitalRead(EDGE_LEFT)  == EDGE_TRIGGER);
-  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
-  bool backEdge  = (digitalRead(EDGE_BACK)  == EDGE_TRIGGER);
-
-  if (leftEdge && rightEdge) {
-    // both triggered: turn to a default safe direction (right)
-    setMotors(RELOCATE_SPEED, -RELOCATE_SPEED);
-  } else if (leftEdge) {
-    // if left edge triggered, turn right to move away
-    setMotors(RELOCATE_SPEED, -RELOCATE_SPEED);
-  } else if (rightEdge) {
-    // if right edge triggered, turn left to move away
-    setMotors(-RELOCATE_SPEED, RELOCATE_SPEED);
-  } else if (backEdge) {
-    // back edge triggered: move forward a bit (rare)
-    setMotors(80, 80);
-  } else {
-    // fallback: spin right
-    setMotors(RELOCATE_SPEED, -RELOCATE_SPEED);
-  }
-
-  delay(EDGE_TURN_MS);
-  stopMotors();
-}
-
-// ---------- Opening Rush (Phase 1) ----------
-void openingRush() {
-  Serial.println("Opening phase: forward + curve to flank...");
-  // 1) forward burst
-  setMotors(100, 100);
-  delay(OPEN_FORWARD_MS);
-
-  // 2) curve (left or right) - choose direction by small random bit
-  bool curveRight = (millis() & 0x04); // quick randomness
-  if (curveRight) {
-    setMotors(100, 60); // curve right
-  } else {
-    setMotors(60, 100); // curve left
-  }
-  delay(OPEN_CURVE_MS);
-
-  // 3) small reverse to avoid immediate contact
-  setMotors(-60, -60);
-  delay(OPEN_REVERSE_MS);
-
-  stopMotors();
-  openingDone = true;
-  Serial.println("Opening done. Switching to hit-and-run.");
-}
-
-// ---------- Opponent detection helpers ----------
-bool opponentDetected() {
-  if (analogRead(OPP_CENTER) < OPP_THRESHOLD) return true;
-  if (analogRead(OPP_CENTER_LEFT) < OPP_THRESHOLD) return true;
-  if (analogRead(OPP_CENTER_RIGHT) < OPP_THRESHOLD) return true;
-  if (analogRead(OPP_LEFT) < OPP_THRESHOLD) return true;
-  if (analogRead(OPP_RIGHT) < OPP_THRESHOLD) return true;
-  return false;
-}
-
-bool opponentCenter() {
-  return (analogRead(OPP_CENTER) < OPP_THRESHOLD);
-}
-
-// ---------- Start / Setup ----------
+// === Start Routine ===
 void waitForStartButton() {
-  Serial.println("Waiting for START (active LOW)...");
-  // wait for press
-  while (digitalRead(START_BUTTON) == HIGH) delay(20);
-  // debounce release
-  delay(DEBOUNCE_MS);
-  while (digitalRead(START_BUTTON) == LOW) delay(20);
-  delay(4800); // short delay before starting actions
-  Serial.println("START pressed. Beginning...");
+  dbg("Waiting for start...");
+  while (digitalRead(START_BUTTON) == HIGH);
+  delay(4800);
+  dbg("Start!");
 }
 
-// ---------- Setup ----------
+// === SETUP ===
 void setup() {
-  Serial.begin(9600);
-
-  // Edge sensors input (QTR-1RC)
+  if (DEBUG) Serial.begin(9600);
+  randomSeed(analogRead(A5) ^ micros());
   pinMode(EDGE_LEFT, INPUT_PULLUP);
   pinMode(EDGE_RIGHT, INPUT_PULLUP);
   pinMode(EDGE_BACK, INPUT_PULLUP);
-
-  // Start button
   pinMode(START_BUTTON, INPUT_PULLUP);
-
-  // No pinMode needed for analog Sharp sensors
-
-  stopMotors();
-  delay(200);
-
-  // Seed randomness attempt (use floating analog pin noise if available)
-  randomSeed(analogRead(A6));
-
   waitForStartButton();
-  // Opening phase will run after start on first loop
+  stateStart = millis();
 }
 
-// ---------- Main Loop ----------
+// === MAIN LOOP ===
 void loop() {
-  // Emergency stop (press start button during match to halt)
+  // 1️⃣ Emergency button
   if (digitalRead(START_BUTTON) == LOW) {
     stopMotors();
-    Serial.println("Kill button pressed. Halting indefinitely.");
-    while (true) delay(1000);
-  }
-
-  // Edge detection highest priority
-  bool leftEdge  = (digitalRead(EDGE_LEFT)  == EDGE_TRIGGER);
-  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
-  bool backEdge  = (digitalRead(EDGE_BACK)  == EDGE_TRIGGER);
-
-  if (leftEdge || rightEdge || backEdge) {
-    Serial.println("EDGE detected! Executing edge avoidance.");
-    edgeAvoidance();
-    delay(50);
+    dbg("Emergency stop");
+    delay(3000);
+    while (digitalRead(START_BUTTON) == LOW);
     return;
   }
 
-  // Opening phase (only once)
-  if (!openingDone) {
-    openingRush();
-    delay(50);
-    return;
+  // 2️⃣ Edge priority — interrupts any state
+  if (edgeDetected()) {
+    botState = EDGE_AVOID;
+    stateStart = millis();
+    stateDuration = EDGE_BACKUP_MS + EDGE_TURN_MS;
   }
 
-  // Mid-game: Hit-and-Run behavior
-  if (opponentDetected()) {
-    Serial.println("Opponent detected -> performing hit-and-run.");
+  // === Sensor reads ===
+  int L = analogRead(OPP_LEFT);
+  int CL = analogRead(OPP_CENTER_LEFT);
+  int C = analogRead(OPP_CENTER);
+  int CR = analogRead(OPP_CENTER_RIGHT);
+  int R = analogRead(OPP_RIGHT);
 
-    // If opponent roughly centered, do a direct attack; else orient slightly first
-    if (opponentCenter()) {
-      attackBurst();   // full short dash
-      retreat();       // reverse out
-      relocate();      // spin to reposition
-    } else {
-      // orient towards last-seen side (simple correction)
-      int cl = analogRead(OPP_CENTER_LEFT);
-      int cr = analogRead(OPP_CENTER_RIGHT);
-      int l  = analogRead(OPP_LEFT);
-      int r  = analogRead(OPP_RIGHT);
+  // === STATE MACHINE ===
+  switch (botState) {
 
-      if (cl < OPP_THRESHOLD || l < OPP_THRESHOLD) {
-        // opponent to left: slight left correction
-        setMotors(70, 30);
-        delay(80);
-      } else if (cr < OPP_THRESHOLD || r < OPP_THRESHOLD) {
-        // opponent to right: slight right correction
-        setMotors(30, 70);
-        delay(80);
-      } else {
-        // fallback quick spin to find center
-        setMotors(50, -50);
-        delay(120);
+    // ================== SEARCH ==================
+    // ================== SEARCH ==================
+    case SEARCH: {
+      static bool spinDir = false;
+      static unsigned long lastFlip = 0;
+
+  // Flip direction every 1.5 seconds
+      if (millis() - lastFlip > SPIN_FLIP_MS) {
+        spinDir = !spinDir;
+        lastFlip = millis();
+  }
+
+  // Smooth forward-arc motion (not pure spin)
+      if (spinDir)
+        setMotors(SEARCH_SPEED, SEARCH_SPEED * 0.4);   // arc right
+      else
+        setMotors(SEARCH_SPEED * 0.4, SEARCH_SPEED);   // arc left
+
+  // Small forward boost every few seconds to keep it mobile
+      if (millis() % 6000 < 200) {
+        setMotors(SEARCH_SPEED + 20, SEARCH_SPEED + 20);
+  }
+
+  // Opponent detection
+      bool sideDetect = (L < SIDE_THRESHOLD || CL < SIDE_THRESHOLD ||
+                        CR < SIDE_THRESHOLD || R < SIDE_THRESHOLD);
+      if (sideDetect) {
+        flankFromLeft = (L + CL) < (CR + R);
+        botState = ATTACK;
+        stateStart = millis();
+        stateDuration = random(ATTACK_MIN_MS, ATTACK_MAX_MS);
+        setMotors(flankFromLeft ? FLANK_SPEED : 60,
+                  flankFromLeft ? 60 : FLANK_SPEED);
+  }
+      else if (C < CENTER_THRESHOLD) {
+        botState = ATTACK;
+        stateStart = millis();
+        stateDuration = random(ATTACK_MIN_MS, ATTACK_MAX_MS);
+        setMotors(ATTACK_SPEED, ATTACK_SPEED);
+  }
+  break;
+}
+
+
+    // ================== ATTACK ==================
+    case ATTACK: {
+      if (timeUp()) {
+        botState = RETREAT;
+        stateStart = millis();
+        stateDuration = RETREAT_MS;
+        setMotors(RETREAT_SPEED, RETREAT_SPEED);
       }
-
-      // then attack, retreat, relocate
-      attackBurst();
-      retreat();
-      relocate();
+      break;
     }
 
-    stopMotors();
-    delay(60); // small cooldown
-    return;
-  }
+    // ================== RETREAT ==================
+    case RETREAT: {
+      if (timeUp()) {
+        botState = RELOCATE;
+        stateStart = millis();
+        stateDuration = RELOCATE_MS;
+        bool dir = random(0, 2);
+        setMotors(dir ? RELOCATE_SPEED : -RELOCATE_SPEED,
+                  dir ? -RELOCATE_SPEED : RELOCATE_SPEED);
+      }
+      break;
+    }
 
-  // No opponent: search mode
-  searchSpin();
-  delay(30); // small loop delay for responsiveness
+    // ================== RELOCATE ==================
+    case RELOCATE: {
+      if (timeUp()) {
+        botState = SEARCH;
+        stopMotors();
+      }
+      break;
+    }
+
+    // ================== EDGE AVOID ==================
+    case EDGE_AVOID: {
+      unsigned long elapsed = millis() - stateStart;
+      if (elapsed < EDGE_BACKUP_MS) {
+        setMotors(-80, -80);
+      }
+      else if (elapsed < stateDuration) {
+        bool Ledge = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
+        bool Redge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
+        bool Bedge = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+
+        if (Bedge) setMotors(80, 80); // Move forward if back edge
+        else if (Ledge) setMotors(RELOCATE_SPEED, -RELOCATE_SPEED); // Turn right
+        else if (Redge) setMotors(-RELOCATE_SPEED, RELOCATE_SPEED); // Turn left
+        else {
+          int randTurn = random(0, 2);
+          setMotors(randTurn ? RELOCATE_SPEED : -RELOCATE_SPEED,
+                    randTurn ? -RELOCATE_SPEED : RELOCATE_SPEED);
+  }
+  stateDuration = EDGE_BACKUP_MS + random(250, 400); // Random recovery time
+}
+ else {
+        botState = SEARCH;
+        stopMotors();
+      }
+      break;
+    }
+  }
 }
