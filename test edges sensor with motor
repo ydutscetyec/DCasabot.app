@@ -1,0 +1,57 @@
+// === SINGLE STEP EDGE SENSOR MOTOR TEST ===
+
+#include <CytronMotorDriver.h>
+
+#define EDGE_LEFT   11
+#define EDGE_BACK   12
+#define EDGE_RIGHT  13
+
+// Motor Pins (PWM_DIR mode)
+CytronMD motorL(PWM_DIR, 5, 4);
+CytronMD motorR(PWM_DIR, 6, 7);
+
+const int EDGE_TRIGGER = LOW; // QTR output LOW = edge
+const int STEP_SPEED   = 100; // speed for single-step movement
+const int STEP_TIME    = 300; // ms duration of one step
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(EDGE_LEFT, INPUT_PULLUP);
+  pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
+
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
+
+  Serial.println("=== SINGLE STEP EDGE MOTOR TEST START ===");
+}
+
+void loop() {
+  // Read edge sensors
+  bool leftEdge  = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
+  bool backEdge  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
+
+  // Print sensor states
+  Serial.print("Left: "); Serial.print(leftEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Back: "); Serial.print(backEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Right: "); Serial.println(rightEdge ? "EDGE" : "SAFE");
+
+  if (leftEdge || backEdge || rightEdge) {
+    // Edge detected → stop motors
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
+    Serial.println("EDGE DETECTED: Stopped!");
+  } else {
+    // No edge → move forward one step
+    motorL.setSpeed(STEP_SPEED);
+    motorR.setSpeed(STEP_SPEED);
+    delay(STEP_TIME);
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
+    Serial.println("Moved one step forward.");
+  }
+
+  delay(500); // small pause before next loop
+}
