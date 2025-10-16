@@ -1,0 +1,86 @@
+
+// === ESP32 + TB6612FNG Motor Test ===
+
+#define AIN1 32
+#define AIN2 22
+#define PWMA 23
+#define BIN1 18
+#define BIN2 19
+#define PWMB 21
+#define STBY 25
+
+#define BTN 13
+#define LED_YELLOW 14
+#define LED_GREEN 4
+
+void setup() {
+  Serial.begin(115200);
+
+  // Setup pins
+  pinMode(AIN1, OUTPUT);
+  pinMode(AIN2, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(BIN2, OUTPUT);
+  pinMode(STBY, OUTPUT);
+  pinMode(BTN, INPUT_PULLUP);
+  pinMode(LED_YELLOW, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+
+  // PWM setup
+  ledcAttachPin(PWMA, 0);
+  ledcAttachPin(PWMB, 1);
+  ledcSetup(0, 1000, 8);
+  ledcSetup(1, 1000, 8);
+
+  digitalWrite(STBY, HIGH);
+  digitalWrite(LED_YELLOW, HIGH);
+  digitalWrite(LED_GREEN, LOW);
+
+  Serial.println("Press button to start motor test...");
+}
+
+void setMotor(int in1, int in2, int pwmChannel, int speed) {
+  speed = constrain(speed, -255, 255);
+  if (speed > 0) {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in2, LOW);
+    ledcWrite(pwmChannel, speed);
+  } else if (speed < 0) {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, HIGH);
+    ledcWrite(pwmChannel, -speed);
+  } else {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, LOW);
+    ledcWrite(pwmChannel, 0);
+  }
+}
+
+void loop() {
+  // Wait for button press
+  if (digitalRead(BTN) == LOW) {
+    delay(200); // debounce
+
+    digitalWrite(LED_YELLOW, LOW);
+    digitalWrite(LED_GREEN, HIGH);
+    Serial.println("Running motors...");
+
+    // Forward
+    setMotor(AIN1, AIN2, 0, 200);
+    setMotor(BIN1, BIN2, 1, 200);
+    delay(2000);
+
+    // Reverse
+    setMotor(AIN1, AIN2, 0, -200);
+    setMotor(BIN1, BIN2, 1, -200);
+    delay(2000);
+
+    // Stop
+    setMotor(AIN1, AIN2, 0, 0);
+    setMotor(BIN1, BIN2, 1, 0);
+
+    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_YELLOW, HIGH);
+    Serial.println("Test complete. Press again to repeat.");
+  }
+}
