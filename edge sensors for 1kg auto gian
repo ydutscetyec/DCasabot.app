@@ -1,0 +1,60 @@
+// === 4-QTR EDGE SENSOR TEST WITH START/STOP BUTTON ===
+// FRONT = 10, LEFT = 13, RIGHT = 12, BACK = 11
+// BUTTON = 2 (Active LOW)
+//
+// Press button to START or STOP reading sensors.
+// Prints sensor status ("EDGE" or "SAFE") on Serial Monitor.
+
+#define EDGE_FRONT 10
+#define EDGE_LEFT  13
+#define EDGE_RIGHT 12
+#define EDGE_BACK  11
+#define START_BUTTON 2  // Active LOW
+
+const int EDGE_TRIGGER = LOW; // QTR outputs LOW when over white edge
+
+bool running = false;           // Test active flag
+bool lastButtonState = HIGH;    // For detecting button press
+
+void setup() {
+  Serial.begin(9600);
+
+  // Configure pins
+  pinMode(EDGE_FRONT, INPUT_PULLUP);
+  pinMode(EDGE_LEFT, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
+  pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(START_BUTTON, INPUT_PULLUP);
+
+  Serial.println("=== 4-QTR EDGE SENSOR TEST READY ===");
+  Serial.println("Press the button to START or STOP reading...");
+}
+
+void loop() {
+  bool buttonState = digitalRead(START_BUTTON);
+
+  // Detect button press (HIGH → LOW transition)
+  if (lastButtonState == HIGH && buttonState == LOW) {
+    running = !running;
+    if (running) Serial.println("\n>>> TEST STARTED <<<");
+    else Serial.println("\n>>> TEST STOPPED <<<");
+    delay(250); // debounce
+  }
+  lastButtonState = buttonState;
+
+  if (!running) return; // idle if not running
+
+  // Read all QTR sensors
+  bool frontEdge = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
+  bool leftEdge  = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
+  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
+  bool backEdge  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+
+  // Print sensor readings
+  Serial.print("Front: "); Serial.print(frontEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Left: "); Serial.print(leftEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Right: "); Serial.print(rightEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Back: "); Serial.println(backEdge ? "EDGE" : "SAFE");
+
+  delay(300); // adjust refresh rate (ms)
+}
