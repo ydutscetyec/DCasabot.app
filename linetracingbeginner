@@ -1,26 +1,11 @@
-#define SENSOR_LEFT   22
-#define SENSOR_BACK   23
-#define SENSOR_RIGHT  32
+#define SENSOR_RIGHT 27
 
 void setup() {
   Serial.begin(115200);
-  pinMode(SENSOR_LEFT, INPUT_PULLUP);
-  pinMode(SENSOR_BACK, INPUT_PULLUP);
-  pinMode(SENSOR_RIGHT, INPUT_PULLUP);
-  Serial.println("=== QTR-1RC SENSOR TEST START ===");
 }
 
 void loop() {
-  bool left  = digitalRead(SENSOR_LEFT);
-  bool back  = digitalRead(SENSOR_BACK);
-  bool right = digitalRead(SENSOR_RIGHT);
-
-  Serial.print("Left: ");
-  Serial.print(left == LOW ? "EDGE" : "SAFE");
-  Serial.print(" | Back: ");
-  Serial.print(back == LOW ? "EDGE" : "SAFE");
-  Serial.print(" | Right: ");
-  Serial.println(right == LOW ? "EDGE" : "SAFE");
-
-  delay(200);
+  int val = analogRead(SENSOR_RIGHT);
+  Serial.println(val);
+  delay(100);
 }
