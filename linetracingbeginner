@@ -1,41 +1,39 @@
-#include <Arduino.h>
+// === QTR-1RC SENSOR FUNCTIONAL TEST for ESP32 ===
 
-// QTR-1RC pins
-const int leftSensor = 22;    // D22
-const int midSensor = 25;     // D25
-const int rightSensor = 32;   // D32
-
-// Function to read QTR-1RC
-unsigned int readQTR(int pin) {
-  unsigned int count = 0;
-  
-  pinMode(pin, OUTPUT);
-  digitalWrite(pin, HIGH);    // Charge the capacitor
-  delayMicroseconds(10);      // Short delay to charge
-
-  pinMode(pin, INPUT);        // Set to input to discharge
-  while (digitalRead(pin) == HIGH && count < 3000) {
-    count++;                  // Count how long pin stays HIGH
-  }
-  
-  return count;
-}
+#define SENSOR_LEFT   22
+#define SENSOR_BACK   23
+#define SENSOR_RIGHT  32
 
 void setup() {
   Serial.begin(115200);
+  
+  pinMode(SENSOR_LEFT, INPUT_PULLUP);
+  pinMode(SENSOR_BACK, INPUT_PULLUP);
+  pinMode(SENSOR_RIGHT, INPUT_PULLUP);
+  
+  Serial.println("=== QTR-1RC SENSOR TEST START ===");
 }
 
 void loop() {
-  unsigned int leftValue = readQTR(leftSensor);
-  unsigned int midValue = readQTR(midSensor);
-  unsigned int rightValue = readQTR(rightSensor);
+  bool left  = digitalRead(SENSOR_LEFT);
+  bool back  = digitalRead(SENSOR_BACK);
+  bool right = digitalRead(SENSOR_RIGHT);
 
   Serial.print("Left: ");
-  Serial.print(leftValue);
-  Serial.print("\tMid: ");
-  Serial.print(midValue);
-  Serial.print("\tRight: ");
-  Serial.println(rightValue);
+  Serial.print(left == LOW ? "EDGE" : "SAFE");
+  Serial.print(" | Back: ");
+  Serial.print(back == LOW ? "EDGE" : "SAFE");
+  Serial.print(" | Right: ");
+  Serial.print(right == LOW ? "EDGE" : "SAFE");
 
-  delay(200); // Short delay between reads
+  // quick functional check
+  if ((left == HIGH || left == LOW) &&
+      (back == HIGH || back == LOW) &&
+      (right == HIGH || right == LOW)) {
+    Serial.println(" | Sensor Status: OK");
+  } else {
+    Serial.println(" | Sensor Status: ERROR");
+  }
+
+  delay(200);
 }
