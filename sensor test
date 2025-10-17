@@ -1,26 +1,31 @@
-#include <QTRSensors.h>
+#define LEFT_PIN  22
+#define MID_PIN   25
+#define RIGHT_PIN 32
 
-#define LEFT_SENSOR   22
-#define MID_SENSOR    25
-#define RIGHT_SENSOR  32
-
-unsigned char sensorPins[3] = {LEFT_SENSOR, MID_SENSOR, RIGHT_SENSOR};
-
-QTRSensorsRC qtr(sensorPins, 3);  // 3 sensors
-
-unsigned int sensorValues[3];
+unsigned int readQTRRC(uint8_t pin) {
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
+  delayMicroseconds(10);
+  pinMode(pin, INPUT);
+  unsigned int time = 0;
+  while (digitalRead(pin) == HIGH && time < 3000) {
+    time++;
+  }
+  return time;
+}
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("=== QTR-1RC Sensor Test ===");
 }
 
 void loop() {
-  qtr.read(sensorValues);
+  unsigned int leftVal  = readQTRRC(LEFT_PIN);
+  unsigned int midVal   = readQTRRC(MID_PIN);
+  unsigned int rightVal = readQTRRC(RIGHT_PIN);
 
-  Serial.print("Left: "); Serial.print(sensorValues[0]);
-  Serial.print("\tMid: "); Serial.print(sensorValues[1]);
-  Serial.print("\tRight: "); Serial.println(sensorValues[2]);
+  Serial.print("Left: "); Serial.print(leftVal);
+  Serial.print("\tMid: "); Serial.print(midVal);
+  Serial.print("\tRight: "); Serial.println(rightVal);
 
   delay(200);
 }
