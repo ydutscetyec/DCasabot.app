@@ -1,76 +1,92 @@
-#include <CytronMotorDriver.h>
-
-// === Motor Setup ===
-CytronMD motorLeft(PWM_PWM, 12, 13);   // Left motor: PWM 12, DIR 13
-CytronMD motorRight(PWM_PWM, 14, 27);  // Right motor: PWM 14, DIR 27
-
-#define MAX_SPEED 255
-
-// === Line Sensors (QTR-1RC Digital) ===
+// === Pin Setup ===
 #define SENSOR_LEFT   25
-#define SENSOR_MIDDLE 33
+#define SENSOR_BACK   33
 #define SENSOR_RIGHT  32
 
-// === PID Constants ===
-float Kp = 80.0;
-float Ki = 0.0;
-float Kd = 50.0;
+// === Motor Pins ===
+#define LEFT_MOTOR_DIR   13
+#define LEFT_MOTOR_PWM   12
+#define RIGHT_MOTOR_DIR  14
+#define RIGHT_MOTOR_PWM  27
 
-// === PID Variables ===
-int error = 0;
-int lastError = 0;
-int integral = 0;
+// === Speed Settings ===
+#define BASE_SPEED   150
+#define TURN_SPEED   200
+#define STOP_SPEED   0
 
 void setup() {
   Serial.begin(115200);
 
   pinMode(SENSOR_LEFT, INPUT_PULLUP);
-  pinMode(SENSOR_MIDDLE, INPUT_PULLUP);
+  pinMode(SENSOR_BACK, INPUT_PULLUP);
   pinMode(SENSOR_RIGHT, INPUT_PULLUP);
 
-  Serial.println("=== ESP32 3-Sensor PID Line Follower ===");
+  pinMode(LEFT_MOTOR_DIR, OUTPUT);
+  pinMode(LEFT_MOTOR_PWM, OUTPUT);
+  pinMode(RIGHT_MOTOR_DIR, OUTPUT);
+  pinMode(RIGHT_MOTOR_PWM, OUTPUT);
+
+  Serial.println("=== SIMPLE LINE FOLLOWING START ===");
 }
 
 void loop() {
-  bool left   = (digitalRead(SENSOR_LEFT) == LOW);   // LOW = line detected
-  bool middle = (digitalRead(SENSOR_MIDDLE) == LOW);
-  bool right  = (digitalRead(SENSOR_RIGHT) == LOW);
+  bool left  = digitalRead(SENSOR_LEFT);
+  bool back  = digitalRead(SENSOR_BACK);
+  bool right = digitalRead(SENSOR_RIGHT);
 
-  // === Determine Error ===
-  if (middle) error = 0;          // Line centered
-  else if (left) error = -1;      // Line to left
-  else if (right) error = 1;      // Line to right
-  else error = lastError;         // Line lost → keep last direction
+  // LOW = black (line), HIGH = white (no line)
+  if (back == LOW && left == HIGH && right == HIGH) {
+    // Center on line → go straight
+    forward(BASE_SPEED);
+    Serial.println("FORWARD");
+  }
+  else if (left == LOW && right == HIGH) {
+    // Left sensor on line → turn left
+    turnLeft(TURN_SPEED);
+    Serial.println("TURN LEFT");
+  }
+  else if (right == LOW && left == HIGH) {
+    // Right sensor on line → turn right
+    turnRight(TURN_SPEED);
+    Serial.println("TURN RIGHT");
+  }
+  else if (left == LOW && right == LOW) {
+    // Both side sensors see line → possibly junction, go straight
+    forward(BASE_SPEED);
+    Serial.println("JUNCTION → FORWARD");
+  }
+  else {
+    // Line lost
+    stopMotors();
+    Serial.println("STOP - LINE LOST");
+  }
 
-  // === PID Calculation ===
-  integral += error;
-  int derivative = error - lastError;
-  lastError = error;
-
-  float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
-
-  int leftSpeed = MAX_SPEED - output;
-  int rightSpeed = MAX_SPEED + output;
-
-  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
-  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
-
-  // === Move Motors ===
-  moveRobot(leftSpeed, rightSpeed);
-
-  // Debug
-  Serial.print("L:"); Serial.print(left);
-  Serial.print(" M:"); Serial.print(middle);
-  Serial.print(" R:"); Serial.print(right);
-  Serial.print(" | Err: "); Serial.print(error);
-  Serial.print(" | Lspd: "); Serial.print(leftSpeed);
-  Serial.print(" | Rspd: "); Serial.println(rightSpeed);
-
-  delay(10);
+  delay(50);
 }
 
-// === Motor Control ===
-void moveRobot(int leftSpeed, int rightSpeed) {
-  motorLeft.setSpeed(leftSpeed);
-  motorRight.setSpeed(rightSpeed);
+// === Motor Control Functions ===
+void forward(int speed) {
+  digitalWrite(LEFT_MOTOR_DIR, HIGH);
+  digitalWrite(RIGHT_MOTOR_DIR, HIGH);
+  analogWrite(LEFT_MOTOR_PWM, speed);
+  analogWrite(RIGHT_MOTOR_PWM, speed);
+}
+
+void turnLeft(int speed) {
+  digitalWrite(LEFT_MOTOR_DIR, LOW);
+  digitalWrite(RIGHT_MOTOR_DIR, HIGH);
+  analogWrite(LEFT_MOTOR_PWM, speed / 2);
+  analogWrite(RIGHT_MOTOR_PWM, speed);
+}
+
+void turnRight(int speed) {
+  digitalWrite(LEFT_MOTOR_DIR, HIGH);
+  digitalWrite(RIGHT_MOTOR_DIR, LOW);
+  analogWrite(LEFT_MOTOR_PWM, speed);
+  analogWrite(RIGHT_MOTOR_PWM, speed / 2);
+}
+
+void stopMotors() {
+  analogWrite(LEFT_MOTOR_PWM, STOP_SPEED);
+  analogWrite(RIGHT_MOTOR_PWM, STOP_SPEED);
 }
