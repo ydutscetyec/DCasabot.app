@@ -1,33 +1,44 @@
-#include <PololuQTRSensors.h>
+// QTR-1RC sensor pins
+const int leftPin = 22;
+const int centerPin = 25;
+const int rightPin = 32;
 
-// Define sensor pins
-const int sensorPins[] = {22, 25, 32};  // D22, D25, D32
-const int emitterPin = 2;                // Optional: controls the IR LED
+// Function to read RC sensor
+unsigned int readQTR(int pin) {
+  unsigned int time = 0;
 
-// Create QTRSensorsRC object
-PololuQTRSensorsRC qtr(sensorPins, sizeof(sensorPins) / sizeof(sensorPins[0]), 2000, emitterPin);
+  // Step 1: charge the capacitor
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
+  delayMicroseconds(10);
+
+  // Step 2: switch to input and measure discharge time
+  pinMode(pin, INPUT);
+  while (digitalRead(pin)) {
+    time++;
+    if (time > 3000) break; // timeout to avoid infinite loop
+  }
+  
+  return time;
+}
 
 void setup() {
   Serial.begin(115200);
-  delay(500);  // Wait for Serial Monitor to initialize
-
-  // Optional: Turn on the emitter LED
-  pinMode(emitterPin, OUTPUT);
-  digitalWrite(emitterPin, HIGH);
-
-  Serial.println("QTR-1RC Test with Pololu Library");
+  delay(500);
+  Serial.println("QTR-1RC Raw RC Timing Test Started");
 }
 
 void loop() {
-  unsigned int sensorValues[3];
-  qtr.read(sensorValues);
+  unsigned int leftVal = readQTR(leftPin);
+  unsigned int centerVal = readQTR(centerPin);
+  unsigned int rightVal = readQTR(rightPin);
 
   Serial.print("Left: ");
-  Serial.print(sensorValues[0]);
+  Serial.print(leftVal);
   Serial.print(" | Center: ");
-  Serial.print(sensorValues[1]);
+  Serial.print(centerVal);
   Serial.print(" | Right: ");
-  Serial.println(sensorValues[2]);
+  Serial.println(rightVal);
 
-  delay(200);  // Adjust delay for readability
+  delay(200);
 }
