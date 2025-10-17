@@ -1,129 +1,93 @@
-// === EDGE SENSOR + MOTOR TEST ===
-// Sensors: FRONT=10, LEFT=13, RIGHT=12, BACK=11
-// Button: 2 (Active LOW)
-// Motors use 2 direction + 2 speed pins
+// === EDGE SENSOR MOTOR TEST WITH START/STOP BUTTON AND MAX SPEED ===
 
-#define EDGE_FRONT 10
-#define EDGE_LEFT  13
-#define EDGE_RIGHT 12
-#define EDGE_BACK  11
-#define START_BUTTON 2
+#include <CytronMotorDriver.h>
 
-// === Motor Pin Setup ===
-// (Adjust according to your wiring)
-#define LEFT_DIR   6
-#define LEFT_PWM   5
-#define RIGHT_DIR  9
-#define RIGHT_PWM  3
+#define EDGE_LEFT    11
+#define EDGE_BACK    12
+#define EDGE_RIGHT   10
+#define START_BUTTON 13  // Active LOW
 
-const int EDGE_TRIGGER = LOW; // QTR outputs LOW over white edge
-bool running = false;
-bool lastButtonState = HIGH;
+// Motor Pins (PWM_DIR mode)
+CytronMD motorL(PWM_DIR, 5, 4);
+CytronMD motorR(PWM_DIR, 6, 7);
 
-// === Basic Motor Functions ===
-void forward() {
-  digitalWrite(LEFT_DIR, HIGH);
-  digitalWrite(RIGHT_DIR, HIGH);
-  analogWrite(LEFT_PWM, 180);
-  analogWrite(RIGHT_PWM, 180);
-}
+const int EDGE_TRIGGER = LOW; // QTR output LOW = edge
+const int ACTION_TIME  = 300; // ms duration of each action
 
-void reverse() {
-  digitalWrite(LEFT_DIR, LOW);
-  digitalWrite(RIGHT_DIR, LOW);
-  analogWrite(LEFT_PWM, 180);
-  analogWrite(RIGHT_PWM, 180);
-}
-
-void turnLeft() {
-  digitalWrite(LEFT_DIR, LOW);
-  digitalWrite(RIGHT_DIR, HIGH);
-  analogWrite(LEFT_PWM, 150);
-  analogWrite(RIGHT_PWM, 150);
-}
-
-void turnRight() {
-  digitalWrite(LEFT_DIR, HIGH);
-  digitalWrite(RIGHT_DIR, LOW);
-  analogWrite(LEFT_PWM, 150);
-  analogWrite(RIGHT_PWM, 150);
-}
-
-void stopMotors() {
-  analogWrite(LEFT_PWM, 0);
-  analogWrite(RIGHT_PWM, 0);
-}
+bool running = false;     // test running flag
+bool lastButtonState = HIGH; // for detecting button press
 
 void setup() {
   Serial.begin(9600);
 
-  // Sensors + button
-  pinMode(EDGE_FRONT, INPUT_PULLUP);
   pinMode(EDGE_LEFT, INPUT_PULLUP);
-  pinMode(EDGE_RIGHT, INPUT_PULLUP);
   pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
   pinMode(START_BUTTON, INPUT_PULLUP);
 
-  // Motors
-  pinMode(LEFT_DIR, OUTPUT);
-  pinMode(RIGHT_DIR, OUTPUT);
-  pinMode(LEFT_PWM, OUTPUT);
-  pinMode(RIGHT_PWM, OUTPUT);
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
 
-  stopMotors();
-
-  Serial.println("=== EDGE SENSOR + MOTOR TEST READY ===");
-  Serial.println("Press button to START or STOP...");
+  Serial.println("=== EDGE MOTOR TEST READY ===");
+  Serial.println("Press the button to start/stop...");
 }
 
 void loop() {
   bool buttonState = digitalRead(START_BUTTON);
 
-  // Toggle run/stop
+  // Detect button press (transition HIGH → LOW)
   if (lastButtonState == HIGH && buttonState == LOW) {
-    running = !running;
-    if (running) Serial.println("\n>>> MOTOR TEST STARTED <<<");
+    running = !running; // toggle running state
+    if (running) Serial.println("Test STARTED");
     else {
-      Serial.println("\n>>> MOTOR TEST STOPPED <<<");
-      stopMotors();
+      Serial.println("Test STOPPED");
+      motorL.setSpeed(0);
+      motorR.setSpeed(0);
     }
-    delay(250);
+    delay(200); // debounce
   }
   lastButtonState = buttonState;
 
-  if (!running) return;
+  if (!running) return; // do nothing if not running
 
-  // === Read sensors ===
-  bool frontEdge = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
+  // Read edge sensors
   bool leftEdge  = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
-  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
   bool backEdge  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+  bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
 
-  // === Behavior ===
-  if (frontEdge) {
-    Serial.println("FRONT EDGE detected → reversing...");
-    reverse();
-    delay(300);
-  } 
-  else if (leftEdge) {
-    Serial.println("LEFT EDGE detected → turning RIGHT...");
-    turnRight();
-    delay(300);
+  // Print sensor states
+  Serial.print("Left: "); Serial.print(leftEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Back: "); Serial.print(backEdge ? "EDGE" : "SAFE");
+  Serial.print(" | Right: "); Serial.println(rightEdge ? "EDGE" : "SAFE");
+
+  // If all are SAFE (black), stop
+  if (!leftEdge && !backEdge && !rightEdge) {
+    Serial.println("All sensors safe (black) → stop");
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
   } 
   else if (rightEdge) {
-    Serial.println("RIGHT EDGE detected → turning LEFT...");
-    turnLeft();
-    delay(300);
+    Serial.println("Right edge detected → turning left");
+    motorL.setSpeed(-255);
+    motorR.setSpeed(255);
+    delay(ACTION_TIME);
+  } 
+  else if (leftEdge) {
+    Serial.println("Left edge detected → turning right");
+    motorL.setSpeed(255);
+    motorR.setSpeed(-255);
+    delay(ACTION_TIME);
   } 
   else if (backEdge) {
-    Serial.println("BACK EDGE detected → moving FORWARD...");
-    forward();
-    delay(300);
-  } 
-  else {
-    Serial.println("SAFE → moving FORWARD");
-    forward();
+    Serial.println("Back edge detected → moving forward");
+    motorL.setSpeed(255);
+    motorR.setSpeed(255);
+    delay(ACTION_TIME);
   }
 
-  delay(100);
+  // Stop after each action to recheck sensors
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
+
+  delay(200); // small pause before next loop
 }
