@@ -6,122 +6,80 @@ CytronMD motorRight(PWM_PWM, 14, 27);  // Right motor: PWM 14, DIR 27
 
 #define MAX_SPEED 255
 
-// =================== LINE SENSOR (ANALOG) ===================
-#define MAKERLINE_AN 36  // Analog pin for center line sensor
-
-// =================== EDGE SENSORS (DIGITAL QTR-1RC) ===================
-#define SENSOR_LEFT  25
-#define SENSOR_BACK  33
-#define SENSOR_RIGHT 32
-
-// =================== BUTTONS ===================
-#define BUTTON_START 34
-#define BUTTON_STOP  35
+// =================== LINE SENSORS (DIGITAL QTR-1RC) ===================
+#define SENSOR_LEFT   25
+#define SENSOR_MIDDLE 33
+#define SENSOR_RIGHT  32
 
 // =================== PID VARIABLES ===================
-int adcLine = 0;
-int setPoint = 0;
-int proportional = 0;
-int lastProportional = 0;
-int derivative = 0;
+float Kp = 100.0;   // Proportional gain
+float Ki = 0.0;     // Integral gain (optional)
+float Kd = 50.0;    // Derivative gain
+
+int error = 0;
+int lastError = 0;
 int integral = 0;
-int powerDiff = 0;
-int speedL = 0;
-int speedR = 0;
-
-unsigned long currentMillis = 0;
-unsigned long previousMillis = 0;
-const int interval = 10;  // PID loop interval in ms
-bool robotRunning = false;
-
-// =================== PID CONSTANTS ===================
-const float Kp = 1.5;
-const float Ki = 0.01;
-const float Kd = 5.0;
 
 void setup() {
   Serial.begin(115200);
 
-  // Motor pins are set in CytronMD object
-  pinMode(MAKERLINE_AN, INPUT);
   pinMode(SENSOR_LEFT, INPUT_PULLUP);
-  pinMode(SENSOR_BACK, INPUT_PULLUP);
+  pinMode(SENSOR_MIDDLE, INPUT_PULLUP);
   pinMode(SENSOR_RIGHT, INPUT_PULLUP);
-  pinMode(BUTTON_START, INPUT_PULLUP);
-  pinMode(BUTTON_STOP, INPUT_PULLUP);
 
-  analogReadResolution(10); // 0-1023
-
-  Serial.println("=== ESP32 PID LINE FOLLOWER with EDGE SENSOR ===");
-
-  // Calibrate setpoint
-  setPoint = analogRead(MAKERLINE_AN);
-  delay(2000);  // Time to place robot on line
+  Serial.println("=== RoboESP32 DIGITAL LINE FOLLOWER (PID) ===");
 }
 
-// =================== MAIN LOOP ===================
 void loop() {
-  // Start/stop buttons
-  if (digitalRead(BUTTON_START) == LOW) robotRunning = true;
-  if (digitalRead(BUTTON_STOP) == LOW) {
-    robotRunning = false;
-    moveRobot(0, 0);
+  // Read sensors (LOW = line detected)
+  bool left   = (digitalRead(SENSOR_LEFT) == LOW);
+  bool middle = (digitalRead(SENSOR_MIDDLE) == LOW);
+  bool right  = (digitalRead(SENSOR_RIGHT) == LOW);
+
+  // =================== CALCULATE ERROR ===================
+  if (middle) {
+    error = 0;           // Centered
+  } else if (left) {
+    error = -1;          // Line on left → negative error
+  } else if (right) {
+    error = 1;           // Line on right → positive error
+  } else {
+    error = 0;           // Line lost → keep previous or stop
   }
 
-  if (!robotRunning) return;
+  integral += error;
+  int derivative = error - lastError;
+  lastError = error;
 
-  currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
+  // =================== PID OUTPUT ===================
+  float output = Kp * error + Ki * integral + Kd * derivative;
 
-    // Read sensors
-    adcLine = analogRead(MAKERLINE_AN);
-    bool edgeLeft = (digitalRead(SENSOR_LEFT) == LOW);
-    bool edgeBack = (digitalRead(SENSOR_BACK) == LOW);
-    bool edgeRight = (digitalRead(SENSOR_RIGHT) == LOW);
+  // =================== CALCULATE MOTOR SPEEDS ===================
+  int speedL = MAX_SPEED - output;
+  int speedR = MAX_SPEED + output;
 
-    // =================== EDGE AVOIDANCE ===================
-    if (edgeLeft || edgeBack || edgeRight) {
-      // Stop motors immediately if edge detected
-      moveRobot(0, 0);
-      Serial.println("EDGE DETECTED! STOPPING...");
-      return;
-    }
+  // Limit speeds
+  speedL = constrain(speedL, 0, MAX_SPEED);
+  speedR = constrain(speedR, 0, MAX_SPEED);
 
-    // =================== LINE FOLLOWING PID ===================
-    proportional = adcLine - setPoint;
-    integral += proportional;
-    derivative = proportional - lastProportional;
-    lastProportional = proportional;
+  moveRobot(speedL, speedR);
 
-    powerDiff = (proportional * Kp) + (integral * Ki) + (derivative * Kd);
+  // Debug output
+  Serial.print("L: "); Serial.print(left);
+  Serial.print(" M: "); Serial.print(middle);
+  Serial.print(" R: "); Serial.print(right);
+  Serial.print(" | Error: "); Serial.print(error);
+  Serial.print(" | Out: "); Serial.print(output);
+  Serial.print(" | Speed L: "); Serial.print(speedL);
+  Serial.print(" R: "); Serial.println(speedR);
 
-    // Limit powerDiff
-    if (powerDiff > MAX_SPEED) powerDiff = MAX_SPEED;
-    if (powerDiff < -MAX_SPEED) powerDiff = -MAX_SPEED;
-
-    // Calculate motor speeds
-    if (powerDiff < 0) {
-      speedL = MAX_SPEED + powerDiff;
-      speedR = MAX_SPEED;
-    } else {
-      speedL = MAX_SPEED;
-      speedR = MAX_SPEED - powerDiff;
-    }
-
-    moveRobot(speedL, speedR);
-
-    // Debug output
-    Serial.print("ADC: "); Serial.print(adcLine);
-    Serial.print(" | L: "); Serial.print(speedL);
-    Serial.print(" | R: "); Serial.println(speedR);
-  }
+  delay(20); // Short delay for loop stability
 }
 
 // =================== MOTOR CONTROL FUNCTION ===================
 void moveRobot(int leftSpeed, int rightSpeed) {
-  leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
-  rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
 
   motorLeft.setSpeed(leftSpeed);
   motorRight.setSpeed(rightSpeed);
