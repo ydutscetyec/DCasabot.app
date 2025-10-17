@@ -1,0 +1,86 @@
+#include <SoftwareSerial.h>
+#include <CytronMotorDriver.h>
+SoftwareSerial BT(8,9); // RX | TX (for HC-05)
+char w;
+int speeds = 80;
+int lowspeed = 40;
+// Configure the motor driver pins
+CytronMD motorL(PWM_DIR, 5, 4);
+CytronMD motorR(PWM_DIR, 6, 7);
+
+//int speedValue = 200; // Change this for speed (0–255)
+
+void setup() {
+  Serial.begin(9600);
+  BT.begin(9600);
+  delay(100);
+  delay(1000);
+  stopMotors();
+  Serial.println("Sumobot RC Ready!");
+}
+
+void loop() {
+  if (BT.available()) {
+    w = BT.read();
+    Serial.println(w);
+
+
+    switch (w) {
+      case 'F': forward(); break;
+      case 'B': backward(); break;
+      case 'L': left(); break;
+      case 'R': right(); break;
+      case 'G': forwardLeft(); break;
+      case 'I': forwardRight(); break;
+      case 'H': backwardLeft(); break;
+      case 'J': backwardRight(); break; 
+      case 'S': stopMotors(); break;
+    } 
+  }
+}
+
+// ---------------- Movement Functions ----------------
+void stopMotors() {
+  motorL.setSpeed(0);
+  motorR.setSpeed(0);
+}
+
+void forward() {
+  motorL.setSpeed(speeds);
+  motorR.setSpeed(speeds);
+}
+
+void backward() {
+  motorL.setSpeed(-speeds);
+  motorR.setSpeed(-speeds);
+}
+
+void right() {
+  motorL.setSpeed(speeds);
+  motorR.setSpeed(0);
+}
+
+void left() {
+  motorL.setSpeed(0);
+  motorR.setSpeed(speeds);
+}
+
+void forwardRight() {
+  motorL.setSpeed(speeds);
+  motorR.setSpeed(lowspeed);
+}
+
+void forwardLeft() {
+  motorL.setSpeed(lowspeed);
+  motorR.setSpeed(speeds);
+}
+
+void backwardLeft() {
+  motorL.setSpeed(-lowspeed);
+  motorR.setSpeed(-speeds);
+}
+
+void backwardRight() {
+  motorL.setSpeed(-speeds);
+  motorR.setSpeed(-lowspeed);
+}
