@@ -1,0 +1,28 @@
+#include <QTRSensors.h>
+
+// Create QTR sensor object (RC type)
+QTRSensorsRC qtr((unsigned char[]){22, 25, 32}, 3);
+
+unsigned int sensorValues[3];
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("=== Pololu QTR-1RC Sensor Test ===");
+  Serial.println("Move sensors over black and white surfaces to see readings.\n");
+
+  delay(1000);
+}
+
+void loop() {
+  // Read sensor values (higher = darker)
+  qtr.read(sensorValues);
+
+  Serial.print("Left: ");
+  Serial.print(sensorValues[0]);
+  Serial.print("\tMid: ");
+  Serial.print(sensorValues[1]);
+  Serial.print("\tRight: ");
+  Serial.println(sensorValues[2]);
+
+  delay(200);
+}
