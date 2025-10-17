@@ -1,14 +1,11 @@
 #include <QTRSensors.h>
 
-// Pins for QTR-1RC sensors
-#define LEFT_PIN   22
-#define MID_PIN    25
-#define RIGHT_PIN  32
+#define LEFT_SENSOR   22
+#define MID_SENSOR    25
+#define RIGHT_SENSOR  32
 
-// Array of pins
-unsigned char sensorPins[3] = {LEFT_PIN, MID_PIN, RIGHT_PIN};
+unsigned char sensorPins[3] = {LEFT_SENSOR, MID_SENSOR, RIGHT_SENSOR};
 
-// Create QTRSensorsRC object
 QTRSensorsRC qtr(sensorPins, 3);  // 3 sensors
 
 unsigned int sensorValues[3];
@@ -16,20 +13,14 @@ unsigned int sensorValues[3];
 void setup() {
   Serial.begin(115200);
   Serial.println("=== QTR-1RC Sensor Test ===");
-
-  delay(1000);  // Wait a bit before starting
 }
 
 void loop() {
-  // Read sensors (higher = darker)
   qtr.read(sensorValues);
 
-  Serial.print("Left: ");
-  Serial.print(sensorValues[0]);
-  Serial.print("\tMid: ");
-  Serial.print(sensorValues[1]);
-  Serial.print("\tRight: ");
-  Serial.println(sensorValues[2]);
+  Serial.print("Left: "); Serial.print(sensorValues[0]);
+  Serial.print("\tMid: "); Serial.print(sensorValues[1]);
+  Serial.print("\tRight: "); Serial.println(sensorValues[2]);
 
   delay(200);
 }
