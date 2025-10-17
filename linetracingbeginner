@@ -1,82 +1,75 @@
 #include <CytronMotorDriver.h>
 
-// ===== MOTOR SETUP =====
-CytronMD motorLeft(PWM_PWM, 12, 13);
-CytronMD motorRight(PWM_PWM, 14, 27);
+// === Motor Setup ===
+CytronMD motorLeft(PWM_PWM, 12, 13);   // Left motor: PWM 12, DIR 13
+CytronMD motorRight(PWM_PWM, 14, 27);  // Right motor: PWM 14, DIR 27
 
 #define MAX_SPEED 255
 
-// ===== LINE SENSORS =====
+// === Line Sensors (QTR-1RC Digital) ===
 #define SENSOR_LEFT   25
 #define SENSOR_MIDDLE 33
 #define SENSOR_RIGHT  32
 
-// ===== PID CONSTANTS =====
-float Kp = 100.0;
+// === PID Constants ===
+float Kp = 80.0;
 float Ki = 0.0;
 float Kd = 50.0;
 
-// ===== PID VARIABLES =====
+// === PID Variables ===
 int error = 0;
 int lastError = 0;
 int integral = 0;
 
 void setup() {
+  Serial.begin(115200);
+
   pinMode(SENSOR_LEFT, INPUT_PULLUP);
   pinMode(SENSOR_MIDDLE, INPUT_PULLUP);
   pinMode(SENSOR_RIGHT, INPUT_PULLUP);
-  Serial.begin(115200);
-  Serial.println("=== PID Line Follower with Recovery ===");
+
+  Serial.println("=== ESP32 3-Sensor PID Line Follower ===");
 }
 
-// ===== MAIN LOOP =====
 void loop() {
-  bool left   = (digitalRead(SENSOR_LEFT) == LOW);
+  bool left   = (digitalRead(SENSOR_LEFT) == LOW);   // LOW = line detected
   bool middle = (digitalRead(SENSOR_MIDDLE) == LOW);
   bool right  = (digitalRead(SENSOR_RIGHT) == LOW);
 
-  // --- Determine error ---
-  if (middle)      error = 0;   // Centered
-  else if (left)   error = -1;  // Drift left
-  else if (right)  error = 1;   // Drift right
-  else             error = 99;  // No line detected
+  // === Determine Error ===
+  if (middle) error = 0;          // Line centered
+  else if (left) error = -1;      // Line to left
+  else if (right) error = 1;      // Line to right
+  else error = lastError;         // Line lost → keep last direction
 
-  // --- Line lost recovery ---
-  if (error == 99) {
-    // Keep turning in the last known direction
-    if (lastError < 0) moveRobot(100, -100);  // Turn left slowly
-    else if (lastError > 0) moveRobot(-100, 100); // Turn right slowly
-    else moveRobot(0, 0); // No clue, stop
-    return;
-  }
-
-  // --- PID Calculation ---
+  // === PID Calculation ===
   integral += error;
   int derivative = error - lastError;
   lastError = error;
 
   float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
 
-  int speedL = MAX_SPEED - output;
-  int speedR = MAX_SPEED + output;
+  int leftSpeed = MAX_SPEED - output;
+  int rightSpeed = MAX_SPEED + output;
 
-  speedL = constrain(speedL, -MAX_SPEED, MAX_SPEED);
-  speedR = constrain(speedR, -MAX_SPEED, MAX_SPEED);
+  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
 
-  moveRobot(speedL, speedR);
+  // === Move Motors ===
+  moveRobot(leftSpeed, rightSpeed);
 
-  // Debugging
+  // Debug
   Serial.print("L:"); Serial.print(left);
   Serial.print(" M:"); Serial.print(middle);
   Serial.print(" R:"); Serial.print(right);
-  Serial.print(" | Error: "); Serial.print(error);
-  Serial.print(" | Lspeed: "); Serial.print(speedL);
-  Serial.print(" | Rspeed: "); Serial.println(speedR);
+  Serial.print(" | Err: "); Serial.print(error);
+  Serial.print(" | Lspd: "); Serial.print(leftSpeed);
+  Serial.print(" | Rspd: "); Serial.println(rightSpeed);
 
   delay(10);
 }
 
-// ===== MOTOR FUNCTION =====
+// === Motor Control ===
 void moveRobot(int leftSpeed, int rightSpeed) {
   motorLeft.setSpeed(leftSpeed);
   motorRight.setSpeed(rightSpeed);
