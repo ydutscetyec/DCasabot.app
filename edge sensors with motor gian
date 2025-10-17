@@ -17,9 +17,9 @@ CytronMD motorL(PWM_DIR, 5, 4); // PWM, DIR
 CytronMD motorR(PWM_DIR, 6, 7); // PWM, DIR
 
 // === Constants ===
-const int EDGE_TRIGGER = LOW;  // QTR outputs LOW when over white edge
-const int ACTION_TIME  = 250;  // ms duration per maneuver
-const int BASE_SPEED   = 200;  // default forward speed
+const int EDGE_TRIGGER = LOW;   // QTR outputs LOW when over white edge
+const int ACTION_TIME  = 300;   // ms duration for each reaction
+const int BASE_SPEED   = 255;   // Max motor speed (0–255)
 
 // === State Variables ===
 bool running = false;
@@ -28,12 +28,14 @@ bool lastButtonState = HIGH;
 void setup() {
   Serial.begin(9600);
 
+  // Sensor & button setup
   pinMode(EDGE_FRONT, INPUT_PULLUP);
   pinMode(EDGE_LEFT, INPUT_PULLUP);
   pinMode(EDGE_RIGHT, INPUT_PULLUP);
   pinMode(EDGE_BACK, INPUT_PULLUP);
   pinMode(START_BUTTON, INPUT_PULLUP);
 
+  // Motors idle
   motorL.setSpeed(0);
   motorR.setSpeed(0);
 
@@ -53,11 +55,11 @@ void loop() {
       motorL.setSpeed(0);
       motorR.setSpeed(0);
     }
-    delay(200); // debounce
+    delay(250); // debounce
   }
   lastButtonState = buttonState;
 
-  if (!running) return;
+  if (!running) return; // skip logic when stopped
 
   // === Read Sensors ===
   bool frontEdge = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
@@ -65,7 +67,7 @@ void loop() {
   bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
   bool backEdge  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
 
-  // === Print States ===
+  // === Print Sensor States ===
   Serial.print("Front: "); Serial.print(frontEdge ? "EDGE" : "SAFE");
   Serial.print(" | Left: "); Serial.print(leftEdge ? "EDGE" : "SAFE");
   Serial.print(" | Right: "); Serial.print(rightEdge ? "EDGE" : "SAFE");
@@ -73,34 +75,34 @@ void loop() {
 
   // === Decision Logic ===
   if (frontEdge) {
-    Serial.println("Front edge → reversing");
+    Serial.println("Front EDGE → Reversing");
     motorL.setSpeed(-BASE_SPEED);
     motorR.setSpeed(-BASE_SPEED);
     delay(ACTION_TIME);
-  } 
+  }
   else if (leftEdge) {
-    Serial.println("Left edge → turning right");
+    Serial.println("Left EDGE → Turning RIGHT");
     motorL.setSpeed(BASE_SPEED);
     motorR.setSpeed(-BASE_SPEED);
     delay(ACTION_TIME);
-  } 
+  }
   else if (rightEdge) {
-    Serial.println("Right edge → turning left");
+    Serial.println("Right EDGE → Turning LEFT");
     motorL.setSpeed(-BASE_SPEED);
     motorR.setSpeed(BASE_SPEED);
     delay(ACTION_TIME);
-  } 
+  }
   else if (backEdge) {
-    Serial.println("Back edge → moving forward");
+    Serial.println("Back EDGE → Moving FORWARD");
     motorL.setSpeed(BASE_SPEED);
     motorR.setSpeed(BASE_SPEED);
     delay(ACTION_TIME);
-  } 
+  }
   else {
-    // ✅ All sensors are SAFE (black)
-    Serial.println("All sensors SAFE → moving FORWARD");
-    motorL.setSpeed(BASE_SPEED);
-    motorR.setSpeed(BASE_SPEED);
+    // ✅ All sensors SAFE (black)
+    Serial.println("All sensors SAFE → STOPPED");
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
   }
 
   delay(100);
