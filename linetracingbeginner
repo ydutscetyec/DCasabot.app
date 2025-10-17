@@ -1,92 +1,78 @@
-// === Pin Setup ===
+#include <CytronMotorDriver.h>
+
+// === Motor Setup ===
+CytronMD motorLeft(PWM_PWM, 12, 13);   // Left motor: PWM = 12, DIR = 13
+CytronMD motorRight(PWM_PWM, 14, 27);  // Right motor: PWM = 14, DIR = 27
+
+// === Sensor Pins ===
 #define SENSOR_LEFT   25
-#define SENSOR_BACK   33
+#define SENSOR_BACK   33  // Treat as center sensor
 #define SENSOR_RIGHT  32
 
-// === Motor Pins ===
-#define LEFT_MOTOR_DIR   13
-#define LEFT_MOTOR_PWM   12
-#define RIGHT_MOTOR_DIR  14
-#define RIGHT_MOTOR_PWM  27
-
 // === Speed Settings ===
-#define BASE_SPEED   150
-#define TURN_SPEED   200
-#define STOP_SPEED   0
+int baseSpeed = 150;   // Forward speed
+int turnSpeed = 120;   // Turning speed
 
 void setup() {
   Serial.begin(115200);
-
   pinMode(SENSOR_LEFT, INPUT_PULLUP);
   pinMode(SENSOR_BACK, INPUT_PULLUP);
   pinMode(SENSOR_RIGHT, INPUT_PULLUP);
-
-  pinMode(LEFT_MOTOR_DIR, OUTPUT);
-  pinMode(LEFT_MOTOR_PWM, OUTPUT);
-  pinMode(RIGHT_MOTOR_DIR, OUTPUT);
-  pinMode(RIGHT_MOTOR_PWM, OUTPUT);
-
-  Serial.println("=== SIMPLE LINE FOLLOWING START ===");
+  Serial.println("=== SIMPLE LINE FOLLOWER START ===");
 }
 
 void loop() {
   bool left  = digitalRead(SENSOR_LEFT);
-  bool back  = digitalRead(SENSOR_BACK);
+  bool back  = digitalRead(SENSOR_BACK);  // center
   bool right = digitalRead(SENSOR_RIGHT);
 
-  // LOW = black (line), HIGH = white (no line)
+  // Debugging
+  Serial.print("L: "); Serial.print(left == LOW ? "LINE" : "WHITE");
+  Serial.print(" | C: "); Serial.print(back == LOW ? "LINE" : "WHITE");
+  Serial.print(" | R: "); Serial.println(right == LOW ? "LINE" : "WHITE");
+
+  // === Line Following Logic ===
   if (back == LOW && left == HIGH && right == HIGH) {
-    // Center on line → go straight
-    forward(BASE_SPEED);
-    Serial.println("FORWARD");
-  }
+    // Center on line
+    forward();
+  } 
   else if (left == LOW && right == HIGH) {
-    // Left sensor on line → turn left
-    turnLeft(TURN_SPEED);
-    Serial.println("TURN LEFT");
-  }
+    // Line is to the left
+    turnLeft();
+  } 
   else if (right == LOW && left == HIGH) {
-    // Right sensor on line → turn right
-    turnRight(TURN_SPEED);
-    Serial.println("TURN RIGHT");
-  }
+    // Line is to the right
+    turnRight();
+  } 
   else if (left == LOW && right == LOW) {
-    // Both side sensors see line → possibly junction, go straight
-    forward(BASE_SPEED);
-    Serial.println("JUNCTION → FORWARD");
-  }
+    // Line split or intersection
+    forward();
+  } 
   else {
-    // Line lost
-    stopMotors();
-    Serial.println("STOP - LINE LOST");
+    // Lost line
+    stopMotor();
   }
 
-  delay(50);
+  delay(20);
 }
 
-// === Motor Control Functions ===
-void forward(int speed) {
-  digitalWrite(LEFT_MOTOR_DIR, HIGH);
-  digitalWrite(RIGHT_MOTOR_DIR, HIGH);
-  analogWrite(LEFT_MOTOR_PWM, speed);
-  analogWrite(RIGHT_MOTOR_PWM, speed);
+// === Movement Functions ===
+void forward() {
+  motorLeft.setSpeed(baseSpeed);
+  motorRight.setSpeed(baseSpeed);
 }
 
-void turnLeft(int speed) {
-  digitalWrite(LEFT_MOTOR_DIR, LOW);
-  digitalWrite(RIGHT_MOTOR_DIR, HIGH);
-  analogWrite(LEFT_MOTOR_PWM, speed / 2);
-  analogWrite(RIGHT_MOTOR_PWM, speed);
+void turnLeft() {
+  motorLeft.setSpeed(0);
+  motorRight.setSpeed(turnSpeed);
 }
 
-void turnRight(int speed) {
-  digitalWrite(LEFT_MOTOR_DIR, HIGH);
-  digitalWrite(RIGHT_MOTOR_DIR, LOW);
-  analogWrite(LEFT_MOTOR_PWM, speed);
-  analogWrite(RIGHT_MOTOR_PWM, speed / 2);
+void turnRight() {
+  motorLeft.setSpeed(turnSpeed);
+  motorRight.setSpeed(0);
 }
 
-void stopMotors() {
-  analogWrite(LEFT_MOTOR_PWM, STOP_SPEED);
-  analogWrite(RIGHT_MOTOR_PWM, STOP_SPEED);
+void stopMotor() {
+  motorLeft.setSpeed(0);
+  motorRight.setSpeed(0);
 }
