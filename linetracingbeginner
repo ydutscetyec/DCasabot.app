@@ -1,11 +1,11 @@
-#define SENSOR_RIGHT 27
+const int left = 32;   // change per sensor
+const int center = 33;
+const int right = 26;  // your “problem” sensor
 
-void setup() {
-  Serial.begin(115200);
-}
-
+void setup() { Serial.begin(115200); }
 void loop() {
-  int val = analogRead(SENSOR_RIGHT);
-  Serial.println(val);
-  delay(100);
+  Serial.print("Left: "); Serial.print(analogRead(left));
+  Serial.print(" | Center: "); Serial.print(analogRead(center));
+  Serial.print(" | Right: "); Serial.println(analogRead(right));
+  delay(200);
 }
