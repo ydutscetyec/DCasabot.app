@@ -1,0 +1,247 @@
+// === 9-SENSOR HIT-AND-RUN SUMOBOT ===
+// Combined 5 Opponent Sensors + 4 Edge Sensors + Smart State Machine
+//
+// STRATEGY:
+// - Edge sensors have highest priority (prevent falling off)
+// - Opponent sensors trigger hit-and-run attacks
+// - Search pattern alternates spinning direction
+// - Non-blocking state transitions (no delays)
+//
+// HARDWARE SETUP:
+// - Opponent sensors (Sharp GP2Y0Axx):
+//     A0 = Left
+//     A1 = Center-Left
+//     A2 = Center
+//     A3 = Center-Right
+//     A4 = Right
+// - Edge sensors (QTR-1RC):
+//     10 = Front
+//     11 = Back
+//     12 = Right
+//     13 = Left
+// - Start button = 2 (Active LOW)
+// - Cytron URC10 motor driver (PWM_DIR mode):
+//     Left  motor → PWM=5, DIR=4
+//     Right motor → PWM=6, DIR=7
+//
+// POWER: 14.8V LiPo 150C, GM25 12V 980RPM motors
+// AUTHOR: ChatGPT (GPT-5 integration, Oct 2025)
+
+#include <CytronMotorDriver.h>
+
+// === MOTOR DRIVER ===
+CytronMD motorL(PWM_DIR, 5, 4);
+CytronMD motorR(PWM_DIR, 6, 7);
+
+// === PINS ===
+#define OPP_LEFT         A0
+#define OPP_CENTER_LEFT  A1
+#define OPP_CENTER       A2
+#define OPP_CENTER_RIGHT A3
+#define OPP_RIGHT        A4
+#define EDGE_FRONT 10
+#define EDGE_BACK  11
+#define EDGE_RIGHT 12
+#define EDGE_LEFT  13
+#define START_BUTTON 2
+
+// === CONSTANTS ===
+const int EDGE_TRIGGER = LOW;
+const int SIDE_THRESHOLD   = 350;  // Adjust per sensor
+const int CENTER_THRESHOLD = 500;  // Adjust per sensor
+
+// === SPEEDS (% of max) ===
+const int SEARCH_SPEED   = 45;
+const int ATTACK_SPEED   = 100;
+const int FLANK_SPEED    = 85;
+const int RETREAT_SPEED  = -90;
+const int RELOCATE_SPEED = 70;
+
+// === TIMINGS (ms) ===
+const unsigned long ATTACK_MIN_MS = 400;
+const unsigned long ATTACK_MAX_MS = 700;
+const unsigned long RETREAT_MS = 250;
+const unsigned long RELOCATE_MS = 300;
+const unsigned long EDGE_BACKUP_MS = 180;
+const unsigned long EDGE_TURN_MS = 250;
+const unsigned long SPIN_FLIP_MS = 1200;
+
+// === STATE MACHINE ===
+enum State { SEARCH, ATTACK, RETREAT, RELOCATE, EDGE_AVOID };
+State botState = SEARCH;
+unsigned long stateStart = 0;
+unsigned long stateDuration = 0;
+bool flankFromLeft = false;
+
+// === HELPER FUNCTIONS ===
+int speedPWM(int pct) {
+  return map(constrain(pct, -100, 100), -100, 100, -255, 255);
+}
+
+void setMotors(int lPct, int rPct) {
+  motorL.setSpeed(speedPWM(lPct));
+  motorR.setSpeed(speedPWM(rPct));
+}
+
+void stopMotors() {
+  setMotors(0, 0);
+}
+
+bool timeUp() {
+  return (millis() - stateStart >= stateDuration);
+}
+
+bool edgeDetected() {
+  bool front = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
+  bool back  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+  bool left  = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
+  bool right = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
+  return (front || back || left || right);
+}
+
+void edgeAvoid() {
+  bool front = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
+  bool back  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
+  bool left  = (digitalRead(EDGE_LEFT) == EDGE_TRIGGER);
+  bool right = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
+
+  if (front) {                       // Front edge → reverse
+    setMotors(-80, -80);
+    delay(EDGE_BACKUP_MS);
+    setMotors(random(0,2)?80:-80, random(0,2)?-80:80);
+    delay(EDGE_TURN_MS);
+  } else if (back) {                 // Back edge → forward
+    setMotors(80, 80);
+    delay(EDGE_BACKUP_MS);
+  } else if (left) {                 // Left edge → turn right
+    setMotors(80, -80);
+    delay(EDGE_TURN_MS);
+  } else if (right) {                // Right edge → turn left
+    setMotors(-80, 80);
+    delay(EDGE_TURN_MS);
+  }
+  stopMotors();
+}
+
+// === START BUTTON ===
+void waitForStartButton() {
+  Serial.println("Waiting for start...");
+  while (digitalRead(START_BUTTON) == HIGH);
+  delay(4800); // Standard sumo start delay
+  Serial.println("GO!");
+}
+
+// === SETUP ===
+void setup() {
+  Serial.begin(9600);
+  randomSeed(analogRead(A5) ^ micros());
+
+  pinMode(EDGE_FRONT, INPUT_PULLUP);
+  pinMode(EDGE_BACK, INPUT_PULLUP);
+  pinMode(EDGE_LEFT, INPUT_PULLUP);
+  pinMode(EDGE_RIGHT, INPUT_PULLUP);
+  pinMode(START_BUTTON, INPUT_PULLUP);
+
+  stopMotors();
+  waitForStartButton();
+
+  stateStart = millis();
+}
+
+// === MAIN LOOP ===
+void loop() {
+  // Emergency Stop
+  if (digitalRead(START_BUTTON) == LOW) {
+    stopMotors();
+    delay(2000);
+    while (digitalRead(START_BUTTON) == LOW);
+    return;
+  }
+
+  // Priority: Edge Detection
+  if (edgeDetected()) {
+    edgeAvoid();
+    botState = SEARCH;
+    stateStart = millis();
+    return;
+  }
+
+  // Read Opponent Sensors
+  int L  = analogRead(OPP_LEFT);
+  int CL = analogRead(OPP_CENTER_LEFT);
+  int C  = analogRead(OPP_CENTER);
+  int CR = analogRead(OPP_CENTER_RIGHT);
+  int R  = analogRead(OPP_RIGHT);
+
+  switch (botState) {
+    // === SEARCH ===
+    case SEARCH: {
+      static bool spinDir = false;
+      static unsigned long lastFlip = 0;
+
+      if (millis() - lastFlip > SPIN_FLIP_MS) {
+        spinDir = !spinDir;
+        lastFlip = millis();
+      }
+
+      // Arc motion
+      if (spinDir)
+        setMotors(SEARCH_SPEED, SEARCH_SPEED * 0.4);
+      else
+        setMotors(SEARCH_SPEED * 0.4, SEARCH_SPEED);
+
+      // Opponent detection
+      bool sideDetect = (L < SIDE_THRESHOLD || CL < SIDE_THRESHOLD ||
+                         CR < SIDE_THRESHOLD || R < SIDE_THRESHOLD);
+      if (sideDetect) {
+        flankFromLeft = (L + CL) < (CR + R);
+        botState = ATTACK;
+        stateStart = millis();
+        stateDuration = random(ATTACK_MIN_MS, ATTACK_MAX_MS);
+        setMotors(flankFromLeft ? FLANK_SPEED : 60,
+                  flankFromLeft ? 60 : FLANK_SPEED);
+      }
+      else if (C < CENTER_THRESHOLD) {
+        botState = ATTACK;
+        stateStart = millis();
+        stateDuration = random(ATTACK_MIN_MS, ATTACK_MAX_MS);
+        setMotors(ATTACK_SPEED, ATTACK_SPEED);
+      }
+      break;
+    }
+
+    // === ATTACK ===
+    case ATTACK:
+      if (timeUp()) {
+        botState = RETREAT;
+        stateStart = millis();
+        stateDuration = RETREAT_MS;
+        setMotors(RETREAT_SPEED, RETREAT_SPEED);
+      }
+      break;
+
+    // === RETREAT ===
+    case RETREAT:
+      if (timeUp()) {
+        botState = RELOCATE;
+        stateStart = millis();
+        stateDuration = RELOCATE_MS;
+        bool dir = random(0, 2);
+        setMotors(dir ? RELOCATE_SPEED : -RELOCATE_SPEED,
+                  dir ? -RELOCATE_SPEED : RELOCATE_SPEED);
+      }
+      break;
+
+    // === RELOCATE ===
+    case RELOCATE:
+      if (timeUp()) {
+        botState = SEARCH;
+        stopMotors();
+      }
+      break;
+
+    default:
+      botState = SEARCH;
+      break;
+  }
+}
