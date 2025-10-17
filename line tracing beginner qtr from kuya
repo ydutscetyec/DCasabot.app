@@ -1,0 +1,207 @@
+#include <QTRSensors.h>
+
+
+// === Motor Pins ===
+
+int enableRightMotor = 6;
+
+int rightMotorPin1   = 7;
+
+int rightMotorPin2   = 8;
+
+
+int enableLeftMotor  = 5;
+
+int leftMotorPin1    = 9;
+
+int leftMotorPin2    = 10;
+
+
+// === QTR Sensor Setup ===
+
+#define SensorCount 3
+
+QTRSensors qtr;
+
+uint16_t sensorValues[SensorCount];
+
+
+const uint8_t sensorPins[SensorCount] = {A0, A1, A2};
+
+
+int baseSpeed = 200;
+
+int turnSpeed = 30;
+
+
+void setup() {
+
+  Serial.begin(9600);
+
+
+  // Initialize QTR sensors
+
+  qtr.setTypeRC();
+
+  qtr.setSensorPins(sensorPins, SensorCount);
+
+  qtr.setEmitterPin(2);
+
+
+  // Motor setup
+
+  pinMode(enableRightMotor, OUTPUT);
+
+  pinMode(rightMotorPin1, OUTPUT);
+
+  pinMode(rightMotorPin2, OUTPUT);
+
+
+  pinMode(enableLeftMotor, OUTPUT);
+
+  pinMode(leftMotorPin1, OUTPUT);
+
+  pinMode(leftMotorPin2, OUTPUT);
+
+
+  delay(1000);
+
+  Serial.println("Calibrating sensors...");
+
+  void turnLeft();
+
+  // Calibrate QTR sensors
+
+  for (int i = 0; i < 100; i++) {
+
+    qtr.calibrate();
+
+    delay(20);
+
+  }
+
+
+  Serial.println("Calibration complete.");
+
+}
+
+
+void loop() {
+
+  qtr.read(sensorValues);
+
+
+  bool left = sensorValues[0] > 2000;   // black line detection (adjust threshold)
+
+  bool center = sensorValues[1] > 2000;
+
+  bool right = sensorValues[2] > 2000;
+
+
+  Serial.print("L: ");
+
+  Serial.print(sensorValues[0]);
+
+  Serial.print("  C: ");
+
+  Serial.print(sensorValues[1]);
+
+  Serial.print("  R: ");
+
+  Serial.println(sensorValues[2]);
+
+
+  if (center && !left && !right) {
+
+    moveForward();
+
+  } 
+
+  else if (left >> center) {
+
+    turnRight();
+
+  } 
+
+  else if (right >> center) {
+
+    turnLeft();
+
+  } /*
+
+  else if (left && center && right) {
+
+    moveForward(); // all black (junction) — go straight
+
+  } 
+
+  else {
+
+    moveForward(); // all white — stop
+
+  }*/
+
+}
+
+
+void moveForward() {
+
+  analogWrite(enableLeftMotor, baseSpeed);
+
+  analogWrite(enableRightMotor, baseSpeed);
+
+
+  digitalWrite(leftMotorPin1, HIGH);
+
+  digitalWrite(leftMotorPin2, LOW);
+
+  digitalWrite(rightMotorPin1, HIGH);
+
+  digitalWrite(rightMotorPin2, LOW);
+
+}
+
+
+void turnLeft() {
+
+  analogWrite(enableLeftMotor, turnSpeed / 2);
+
+  analogWrite(enableRightMotor, 100);
+
+
+  digitalWrite(leftMotorPin1, LOW);
+
+  digitalWrite(leftMotorPin2, HIGH);
+
+  digitalWrite(rightMotorPin1, HIGH);
+
+  digitalWrite(rightMotorPin2, LOW);
+
+}
+
+
+void turnRight() {
+
+  analogWrite(enableLeftMotor, 100);
+
+  analogWrite(enableRightMotor, turnSpeed / 2);
+
+
+  digitalWrite(leftMotorPin1, HIGH);
+
+  digitalWrite(leftMotorPin2, LOW);
+
+  digitalWrite(rightMotorPin1, LOW);
+
+  digitalWrite(rightMotorPin2, HIGH);
+
+}
+
+
+void stopMotors() {
+
+  analogWrite(enableLeftMotor, 0);
+
+  analogWrite(enableRightMotor, 0);
+
+}
