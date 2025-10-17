@@ -1,86 +1,83 @@
 #include <CytronMotorDriver.h>
 
-// =================== MOTOR SETUP ===================
-CytronMD motorLeft(PWM_PWM, 12, 13);   // Left motor: PWM 12, DIR 13
-CytronMD motorRight(PWM_PWM, 14, 27);  // Right motor: PWM 14, DIR 27
+// ===== MOTOR SETUP =====
+CytronMD motorLeft(PWM_PWM, 12, 13);
+CytronMD motorRight(PWM_PWM, 14, 27);
 
 #define MAX_SPEED 255
 
-// =================== LINE SENSORS (DIGITAL QTR-1RC) ===================
+// ===== LINE SENSORS =====
 #define SENSOR_LEFT   25
 #define SENSOR_MIDDLE 33
 #define SENSOR_RIGHT  32
 
-// =================== PID VARIABLES ===================
-float Kp = 100.0;   // Proportional gain
-float Ki = 0.0;     // Integral gain (optional)
-float Kd = 50.0;    // Derivative gain
+// ===== PID CONSTANTS =====
+float Kp = 100.0;
+float Ki = 0.0;
+float Kd = 50.0;
 
+// ===== PID VARIABLES =====
 int error = 0;
 int lastError = 0;
 int integral = 0;
 
 void setup() {
-  Serial.begin(115200);
-
   pinMode(SENSOR_LEFT, INPUT_PULLUP);
   pinMode(SENSOR_MIDDLE, INPUT_PULLUP);
   pinMode(SENSOR_RIGHT, INPUT_PULLUP);
-
-  Serial.println("=== RoboESP32 DIGITAL LINE FOLLOWER (PID) ===");
+  Serial.begin(115200);
+  Serial.println("=== PID Line Follower with Recovery ===");
 }
 
+// ===== MAIN LOOP =====
 void loop() {
-  // Read sensors (LOW = line detected)
   bool left   = (digitalRead(SENSOR_LEFT) == LOW);
   bool middle = (digitalRead(SENSOR_MIDDLE) == LOW);
   bool right  = (digitalRead(SENSOR_RIGHT) == LOW);
 
-  // =================== CALCULATE ERROR ===================
-  if (middle) {
-    error = 0;           // Centered
-  } else if (left) {
-    error = -1;          // Line on left → negative error
-  } else if (right) {
-    error = 1;           // Line on right → positive error
-  } else {
-    error = 0;           // Line lost → keep previous or stop
+  // --- Determine error ---
+  if (middle)      error = 0;   // Centered
+  else if (left)   error = -1;  // Drift left
+  else if (right)  error = 1;   // Drift right
+  else             error = 99;  // No line detected
+
+  // --- Line lost recovery ---
+  if (error == 99) {
+    // Keep turning in the last known direction
+    if (lastError < 0) moveRobot(100, -100);  // Turn left slowly
+    else if (lastError > 0) moveRobot(-100, 100); // Turn right slowly
+    else moveRobot(0, 0); // No clue, stop
+    return;
   }
 
+  // --- PID Calculation ---
   integral += error;
   int derivative = error - lastError;
   lastError = error;
 
-  // =================== PID OUTPUT ===================
-  float output = Kp * error + Ki * integral + Kd * derivative;
+  float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
 
-  // =================== CALCULATE MOTOR SPEEDS ===================
   int speedL = MAX_SPEED - output;
   int speedR = MAX_SPEED + output;
 
-  // Limit speeds
-  speedL = constrain(speedL, 0, MAX_SPEED);
-  speedR = constrain(speedR, 0, MAX_SPEED);
+  speedL = constrain(speedL, -MAX_SPEED, MAX_SPEED);
+  speedR = constrain(speedR, -MAX_SPEED, MAX_SPEED);
 
   moveRobot(speedL, speedR);
 
-  // Debug output
-  Serial.print("L: "); Serial.print(left);
-  Serial.print(" M: "); Serial.print(middle);
-  Serial.print(" R: "); Serial.print(right);
+  // Debugging
+  Serial.print("L:"); Serial.print(left);
+  Serial.print(" M:"); Serial.print(middle);
+  Serial.print(" R:"); Serial.print(right);
   Serial.print(" | Error: "); Serial.print(error);
-  Serial.print(" | Out: "); Serial.print(output);
-  Serial.print(" | Speed L: "); Serial.print(speedL);
-  Serial.print(" R: "); Serial.println(speedR);
+  Serial.print(" | Lspeed: "); Serial.print(speedL);
+  Serial.print(" | Rspeed: "); Serial.println(speedR);
 
-  delay(20); // Short delay for loop stability
+  delay(10);
 }
 
-// =================== MOTOR CONTROL FUNCTION ===================
+// ===== MOTOR FUNCTION =====
 void moveRobot(int leftSpeed, int rightSpeed) {
-  leftSpeed = constrain(leftSpeed, 0, MAX_SPEED);
-  rightSpeed = constrain(rightSpeed, 0, MAX_SPEED);
-
   motorLeft.setSpeed(leftSpeed);
   motorRight.setSpeed(rightSpeed);
 }
