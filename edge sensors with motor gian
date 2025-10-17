@@ -1,7 +1,7 @@
-// === 4-EDGE SENSOR + MOTOR TEST WITH START/STOP BUTTON ===
+// === 4-EDGE SENSOR MOTOR TEST WITH START/STOP BUTTON AND MAX SPEED ===
 // FRONT=10, LEFT=13, RIGHT=12, BACK=11
 // BUTTON=2 (Active LOW)
-// Uses CytronMotorDriver (PWM_DIR mode)
+// Uses CytronMotorDriver in PWM_DIR mode
 
 #include <CytronMotorDriver.h>
 
@@ -10,7 +10,7 @@
 #define EDGE_LEFT  13
 #define EDGE_RIGHT 12
 #define EDGE_BACK  11
-#define START_BUTTON 2  // Active LOW button
+#define START_BUTTON 2  // Active LOW
 
 // === Motor Pins ===
 CytronMD motorL(PWM_DIR, 5, 4); // PWM, DIR
@@ -18,8 +18,8 @@ CytronMD motorR(PWM_DIR, 6, 7); // PWM, DIR
 
 // === Constants ===
 const int EDGE_TRIGGER = LOW;   // QTR outputs LOW when over white edge
-const int ACTION_TIME  = 300;   // ms duration for each reaction
-const int BASE_SPEED   = 255;   // Max motor speed (0–255)
+const int ACTION_TIME  = 300;   // ms duration per reaction
+const int BASE_SPEED   = 255;   // max motor speed (0–255)
 
 // === State Variables ===
 bool running = false;
@@ -28,38 +28,38 @@ bool lastButtonState = HIGH;
 void setup() {
   Serial.begin(9600);
 
-  // Sensor & button setup
+  // Sensor setup
   pinMode(EDGE_FRONT, INPUT_PULLUP);
   pinMode(EDGE_LEFT, INPUT_PULLUP);
   pinMode(EDGE_RIGHT, INPUT_PULLUP);
   pinMode(EDGE_BACK, INPUT_PULLUP);
   pinMode(START_BUTTON, INPUT_PULLUP);
 
-  // Motors idle
+  // Motors stop
   motorL.setSpeed(0);
   motorR.setSpeed(0);
 
-  Serial.println("=== 4-EDGE SENSOR + MOTOR TEST READY ===");
-  Serial.println("Press the button to START or STOP...");
+  Serial.println("=== 4-EDGE MOTOR TEST READY ===");
+  Serial.println("Press the button to START/STOP...");
 }
 
 void loop() {
   bool buttonState = digitalRead(START_BUTTON);
 
-  // === Toggle Test Start/Stop ===
+  // === Detect button press ===
   if (lastButtonState == HIGH && buttonState == LOW) {
-    running = !running;
+    running = !running; // toggle start/stop
     if (running) Serial.println("\n>>> TEST STARTED <<<");
     else {
       Serial.println("\n>>> TEST STOPPED <<<");
       motorL.setSpeed(0);
       motorR.setSpeed(0);
     }
-    delay(250); // debounce
+    delay(200); // debounce
   }
   lastButtonState = buttonState;
 
-  if (!running) return; // skip logic when stopped
+  if (!running) return; // idle if stopped
 
   // === Read Sensors ===
   bool frontEdge = (digitalRead(EDGE_FRONT) == EDGE_TRIGGER);
@@ -67,43 +67,43 @@ void loop() {
   bool rightEdge = (digitalRead(EDGE_RIGHT) == EDGE_TRIGGER);
   bool backEdge  = (digitalRead(EDGE_BACK) == EDGE_TRIGGER);
 
-  // === Print Sensor States ===
+  // === Print Status ===
   Serial.print("Front: "); Serial.print(frontEdge ? "EDGE" : "SAFE");
   Serial.print(" | Left: "); Serial.print(leftEdge ? "EDGE" : "SAFE");
   Serial.print(" | Right: "); Serial.print(rightEdge ? "EDGE" : "SAFE");
   Serial.print(" | Back: "); Serial.println(backEdge ? "EDGE" : "SAFE");
 
-  // === Decision Logic ===
+  // === Reaction Logic ===
   if (frontEdge) {
-    Serial.println("Front EDGE → Reversing");
+    Serial.println("Front edge detected → reversing");
     motorL.setSpeed(-BASE_SPEED);
     motorR.setSpeed(-BASE_SPEED);
     delay(ACTION_TIME);
   }
   else if (leftEdge) {
-    Serial.println("Left EDGE → Turning RIGHT");
+    Serial.println("Left edge detected → turning right");
     motorL.setSpeed(BASE_SPEED);
     motorR.setSpeed(-BASE_SPEED);
     delay(ACTION_TIME);
   }
   else if (rightEdge) {
-    Serial.println("Right EDGE → Turning LEFT");
+    Serial.println("Right edge detected → turning left");
     motorL.setSpeed(-BASE_SPEED);
     motorR.setSpeed(BASE_SPEED);
     delay(ACTION_TIME);
   }
   else if (backEdge) {
-    Serial.println("Back EDGE → Moving FORWARD");
+    Serial.println("Back edge detected → moving forward");
     motorL.setSpeed(BASE_SPEED);
     motorR.setSpeed(BASE_SPEED);
     delay(ACTION_TIME);
   }
   else {
-    // ✅ All sensors SAFE (black)
-    Serial.println("All sensors SAFE → STOPPED");
+    Serial.println("All SAFE (black) → stopped");
     motorL.setSpeed(0);
     motorR.setSpeed(0);
   }
 
-  delay(100);
+  // Stop briefly before next read
+  delay(150);
 }
